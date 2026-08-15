@@ -58,6 +58,12 @@
   used all 8 requests and did perform incremental audits, but its canonical
   candidate removed the prompt/bootstrap `reason` call and leaked `# OBS:`
   lines before `# <TAPE>`. It failed `test.sh` and was not adopted.
+- The controlled Sol `xhigh` comparison used the same seed, prompt, and 8-request
+  cap. Sol reached a continuing image rather than `finish`; its next `reason`
+  was rejected by the exhausted local cap. It showed better clean-fixture and
+  publication awareness but remained incomplete and retained 207 raw
+  observations. Both trials are preserved under `experiments/`; neither was
+  adopted.
 - This host's legacy macOS 12.5.1 / Docker Desktop 4.9.1 stack is acceptable only
   for stub/verification convenience, not as the sole boundary for live arbitrary
   Bash. Use a no-sharing disposable UTM Linux VM now, or Docker Sandboxes clone
