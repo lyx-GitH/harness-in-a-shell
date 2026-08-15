@@ -41,6 +41,21 @@
 # For pipelines, redirections, or compound shell syntax, define a function
 # containing that syntax and pass the function name to observe.
 #
+# New tools may be authored from scratch, composed from existing tools, refined
+# from existing tools, or derived through any recursive combination of
+# authoring, composition, and refinement.
+#
+observe() {
+    local __react_observe_output __react_observe_status
+
+    __react_observe_output="$(mktemp "${TMPDIR:-/tmp}/react-observe.XXXXXX")" || return
+    "$@" > "$__react_observe_output" 2>&1
+    __react_observe_status=$?
+    sed 's/^/# OBS: /' "$__react_observe_output"
+    rm -f "$__react_observe_output"
+    printf '# EXIT: %d\n' "$__react_observe_status"
+}
+
 # CONTROL FLOW
 #
 # reason is the continuation. Call reason only after every action and
@@ -74,17 +89,6 @@ SELF="$ROOT/$(basename "$0")"
 CANONICAL="$ROOT/ReAct.sh"
 
 : "${OPENAI_MODEL:=gpt-5.6-sol}"
-
-observe() {
-    local __react_observe_output __react_observe_status
-
-    __react_observe_output="$(mktemp "${TMPDIR:-/tmp}/react-observe.XXXXXX")" || return
-    "$@" > "$__react_observe_output" 2>&1
-    __react_observe_status=$?
-    sed 's/^/# OBS: /' "$__react_observe_output"
-    rm -f "$__react_observe_output"
-    printf '# EXIT: %d\n' "$__react_observe_status"
-}
 
 # EDIT_CONTEXT CONTRACT
 #

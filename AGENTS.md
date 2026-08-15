@@ -2,6 +2,8 @@
 
 - `ReAct.sh` is the entire agent runtime and canonical image. Keep it small and
   preserve the append-only execution semantics.
+- Keep `observe()` co-located with its TOOL MODEL contract inside `<SYSTEM>`;
+  executable function source is itself part of the model's instructions.
 - `test.sh` is the only test harness. It must not call the real API; it injects
   `curl` and `jq` stubs through `PATH`.
 - Run syntax checks with `/bin/bash -n ReAct.sh` and `/bin/bash -n test.sh`.
