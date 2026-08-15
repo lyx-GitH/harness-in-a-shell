@@ -48,3 +48,13 @@ validation, integrated it into context switching and finalization, and tested a
 sanitized child-Bash boundary. All changes remained live trajectory after
 `# <TAPE>`; no context switch or `finish` made them durable. The artifacts are
 therefore evidence of incremental design behavior, not an adopted candidate.
+
+## Offline tasklog trial
+
+`2026-08-15-sol-xhigh-tasklog-64-cap-10k-truncated/` preserves a real-task trial
+with a 64-request cap. Despite being encouraged to use and improve the harness,
+Sol used only two requests and attempted to generate the implementation and
+tests in one 10000-token response. The response ended inside a test heredoc;
+Bash treated EOF as its terminator and the run falsely exited 0 without tests,
+documentation, or `finish`. An independent isolated smoke test also found a
+functional `list` bug. Nothing was adopted.

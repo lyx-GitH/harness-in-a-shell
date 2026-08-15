@@ -82,6 +82,14 @@
   after `<TAPE>` and none were adopted. Its duplicate/non-tail `reason` calls
   also demonstrate that an API request cap is not necessarily a clean agent
   round count. The trace is preserved under `experiments/`.
+- In the offline tasklog trial, raising the request cap to 64 did not induce a
+  multi-round workflow: Sol used two requests and its second 10000-token output
+  ended inside a test heredoc. Bash warns but can return success when EOF closes
+  an unterminated heredoc, and `bash -n` does not make that warning fatal. Since
+  `reason` currently extracts text without rejecting an incomplete Responses
+  result, the container falsely exited 0 without `finish`. Prompt-level
+  encouragement to use the harness was insufficient; preserve the trace under
+  `experiments/` and address incomplete-response admission before retrying.
 - This host's legacy macOS 12.5.1 / Docker Desktop 4.9.1 stack is acceptable only
   for stub/verification convenience, not as the sole boundary for live arbitrary
   Bash. Use a no-sharing disposable UTM Linux VM now, or Docker Sandboxes clone
