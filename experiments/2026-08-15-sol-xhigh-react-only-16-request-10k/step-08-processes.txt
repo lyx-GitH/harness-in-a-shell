@@ -1,0 +1,8 @@
+PID                 PPID                USER                STAT                COMMAND
+13825               13800               65532               Ss                  /sbin/docker-init -- /usr/local/bin/react-sandbox-entrypoint
+13854               13825               65532               Sl                  /usr/bin/qemu-x86_64 /usr/bin/bash bash /usr/local/bin/react-sandbox-entrypoint
+13903               13854               65532               Sl                  /usr/bin/qemu-x86_64 /usr/bin/timeout timeout --signal=TERM --kill-after=5s 1800s bash ReAct.sh improve the harness step by step
+13906               13903               65532               Sl                  /usr/bin/qemu-x86_64 /usr/bin/bash bash ReAct.sh improve the harness step by step
+16633               13906               65532               Sl                  /usr/bin/qemu-x86_64 /usr/bin/bash bash ReAct.sh improve the harness step by step
+16637               16633               65532               Sl                  /usr/bin/qemu-x86_64 /usr/bin/curl curl -fsS -H Content-Type: application/json --data-binary @- --unix-socket /run/openai-relay/openai.sock --noproxy * http://relay/v1/responses
+16639               16633               65532               Sl                  /usr/bin/qemu-x86_64 /usr/bin/jq jq -er [ .output[]? | select(.type == "message") | .content[]? | select(.type == "output_text") | .text ] as $text | if ($text | length) == 0 then error("response contained no output_text") else $text | join("\n") end

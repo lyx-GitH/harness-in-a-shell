@@ -5,7 +5,9 @@ umask 077
 export LC_ALL=C
 
 ROOT="$(cd "$(dirname "$0")" && pwd -P)"
-AGENT_IMAGE=harness-in-a-shell-agent:local
+: "${SANDBOX_AGENT_IMAGE:=harness-in-a-shell-agent:local}"
+: "${SANDBOX_AGENT_DOCKERFILE:=sandbox/Dockerfile.agent}"
+AGENT_IMAGE="$SANDBOX_AGENT_IMAGE"
 RELAY_IMAGE=harness-in-a-shell-relay:local
 
 : "${OPENAI_MODEL:=gpt-5.6-sol}"
@@ -15,6 +17,7 @@ RELAY_IMAGE=harness-in-a-shell-relay:local
 : "${SANDBOX_WORK_SIZE:=256m}"
 : "${OPENAI_MAX_REQUESTS:=8}"
 : "${OPENAI_MAX_OUTPUT_TOKENS:=4096}"
+: "${OPENAI_CHECKPOINT_AFTER_REQUESTS:=}"
 
 build_args=()
 if [[ -n "${SANDBOX_BASE_IMAGE-}" ]]; then
@@ -84,6 +87,16 @@ normalize_positive_int() {
 normalize_positive_int SANDBOX_TIMEOUT_SECONDS "$SANDBOX_TIMEOUT_SECONDS"
 normalize_positive_int OPENAI_MAX_REQUESTS "$OPENAI_MAX_REQUESTS"
 normalize_positive_int OPENAI_MAX_OUTPUT_TOKENS "$OPENAI_MAX_OUTPUT_TOKENS"
+if [[ -n "$OPENAI_CHECKPOINT_AFTER_REQUESTS" ]]; then
+    normalize_positive_int \
+        OPENAI_CHECKPOINT_AFTER_REQUESTS "$OPENAI_CHECKPOINT_AFTER_REQUESTS"
+    if [[ "$MODE" != run ]]; then
+        die "OPENAI_CHECKPOINT_AFTER_REQUESTS is only valid for run"
+    fi
+    if ((OPENAI_CHECKPOINT_AFTER_REQUESTS >= OPENAI_MAX_REQUESTS)); then
+        die "OPENAI_CHECKPOINT_AFTER_REQUESTS must be less than OPENAI_MAX_REQUESTS"
+    fi
+fi
 
 case "$OPENAI_REASONING_EFFORT" in
     ''|none|low|medium|high|xhigh|max) ;;
@@ -145,7 +158,7 @@ if [[ "${SANDBOX_SKIP_BUILD-}" == 1 ]]; then
 else
     docker build \
         "${build_args[@]}" \
-        --file "$ROOT/sandbox/Dockerfile.agent" \
+        --file "$ROOT/$SANDBOX_AGENT_DOCKERFILE" \
         --tag "$AGENT_IMAGE" \
         "$ROOT"
 fi
@@ -208,6 +221,7 @@ if [[ "$MODE" != test ]]; then
         -e OPENAI_API_KEY \
         -e OPENAI_ALLOWED_MODEL="$OPENAI_MODEL" \
         -e OPENAI_REASONING_EFFORT="$OPENAI_REASONING_EFFORT" \
+        -e OPENAI_PAUSE_AFTER_REQUESTS="$OPENAI_CHECKPOINT_AFTER_REQUESTS" \
         -e OPENAI_MAX_REQUESTS="$OPENAI_MAX_REQUESTS" \
         -e OPENAI_MAX_OUTPUT_TOKENS="$OPENAI_MAX_OUTPUT_TOKENS" \
         "$RELAY_IMAGE" >/dev/null
@@ -304,6 +318,10 @@ fi
 
 ARCHIVE="$RUN_TMP/workspace.tar.gz"
 STDERR_CAPTURE="$RUN_TMP/container-stderr.bin"
+CHECKPOINT_ACTIVE_IMAGE="$RUN_TMP/checkpoint-active-image.bin"
+CHECKPOINT_PROCESSES="$RUN_TMP/checkpoint-processes.bin"
+CHECKPOINT_INPUT_SHA256="$RUN_TMP/checkpoint-input-sha256"
+checkpoint_captured=
 docker start "$AGENT_CONTAINER" >/dev/null
 
 # The command inside the container is untrusted and runs as the same user as
@@ -316,6 +334,33 @@ while [[ "$(agent_inspect '{{.State.Running}}')" == true ]]; do
         host_timed_out=1
         docker kill "$AGENT_CONTAINER" >/dev/null 2>&1 || true
         break
+    fi
+    if [[ -n "$OPENAI_CHECKPOINT_AFTER_REQUESTS" && -z "$checkpoint_captured" ]]; then
+        pause_ready="$(
+            docker exec "$RELAY_CONTAINER" \
+                python3 -c 'from pathlib import Path; path=Path("/tmp/openai-pause-ready"); print(path.read_text(encoding="ascii").strip() if path.exists() else "")' \
+                2>/dev/null || true
+        )"
+        if [[ "$pause_ready" == "$OPENAI_CHECKPOINT_AFTER_REQUESTS" ]]; then
+            docker exec "$RELAY_CONTAINER" \
+                python3 -c 'import sys; sys.stdout.buffer.write(open("/tmp/openai-pause-input", "rb").read())' \
+                > "$CHECKPOINT_ACTIVE_IMAGE" ||
+                die "could not capture the checkpoint active image"
+            docker exec "$RELAY_CONTAINER" \
+                python3 -c 'print(open("/tmp/openai-pause-input-sha256", encoding="ascii").read().strip())' \
+                > "$CHECKPOINT_INPUT_SHA256" ||
+                die "could not capture the checkpoint input hash"
+            if ! docker top "$AGENT_CONTAINER" -eo pid,ppid,user,stat,args \
+                > "$CHECKPOINT_PROCESSES" 2>&1; then
+                die "could not capture the checkpoint process table"
+            fi
+            docker exec "$RELAY_CONTAINER" \
+                python3 -c 'open("/tmp/openai-pause-release", "wb").close()' ||
+                die "could not release the checkpoint barrier"
+            checkpoint_captured=1
+            printf 'sandbox: captured checkpoint after %s requests; continuing\n' \
+                "$OPENAI_CHECKPOINT_AFTER_REQUESTS"
+        fi
     fi
     sleep 1
 done
@@ -353,6 +398,20 @@ if [[ -n "$relay_request_count" ]]; then
 fi
 printf '%s\n' "$OPENAI_MODEL" > "$RUN_DIR/model"
 printf '%s\n' "${OPENAI_REASONING_EFFORT:-default}" > "$RUN_DIR/reasoning-effort"
+printf '%s\n' "$SANDBOX_AGENT_IMAGE" > "$RUN_DIR/agent-image"
+printf '%s\n' "$SANDBOX_AGENT_DOCKERFILE" > "$RUN_DIR/agent-dockerfile"
+if [[ -n "$OPENAI_CHECKPOINT_AFTER_REQUESTS" ]]; then
+    printf '%s\n' "$OPENAI_CHECKPOINT_AFTER_REQUESTS" \
+        > "$RUN_DIR/checkpoint-after-request"
+    if [[ -n "$checkpoint_captured" ]]; then
+        mv "$CHECKPOINT_ACTIVE_IMAGE" "$RUN_DIR/checkpoint-active-image.bin"
+        mv "$CHECKPOINT_PROCESSES" "$RUN_DIR/checkpoint-processes.bin"
+        mv "$CHECKPOINT_INPUT_SHA256" "$RUN_DIR/checkpoint-input-sha256"
+        printf 'yes\n' > "$RUN_DIR/checkpoint-captured"
+    else
+        printf 'no\n' > "$RUN_DIR/checkpoint-captured"
+    fi
+fi
 
 if [[ "$container_status" == 0 ]]; then
     printf 'sandbox: %s completed successfully\n' "$MODE"
@@ -364,6 +423,15 @@ if [[ "$MODE" == run ]]; then
         "$relay_request_count" "$OPENAI_MAX_REQUESTS"
     printf 'sandbox: model %s; reasoning effort %s\n' \
         "$OPENAI_MODEL" "${OPENAI_REASONING_EFFORT:-default}"
+    if [[ -n "$OPENAI_CHECKPOINT_AFTER_REQUESTS" ]]; then
+        checkpoint_summary="not reached"
+        if [[ -n "$checkpoint_captured" ]]; then
+            checkpoint_summary="captured"
+        fi
+        printf 'sandbox: checkpoint after request %s: %s\n' \
+            "$OPENAI_CHECKPOINT_AFTER_REQUESTS" \
+            "$checkpoint_summary"
+    fi
 fi
 printf 'sandbox: container exit %s; quarantined artifacts: %s\n' \
     "$container_status" "$RUN_DIR"

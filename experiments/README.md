@@ -35,3 +35,16 @@ improvement. It also wasted work on one invalid subshell inspection and one
 duplicated source inspection, and its continuing image retained 207 raw
 observation lines. The evidence supports a behavioral difference, not adoption
 of either candidate.
+
+## ReAct-only 16-request trace
+
+`2026-08-15-sol-xhigh-react-only-16-request-10k/` preserves a separate Sol
+`xhigh` run whose only project payload was `ReAct.sh`. It used the prompt
+`improve the harness step by step`, a 16-request cap, a 10000-token per-response
+cap, and an exact active-image checkpoint before request 9 was released.
+
+The model found and fixed observation framing, developed structural image
+validation, integrated it into context switching and finalization, and tested a
+sanitized child-Bash boundary. All changes remained live trajectory after
+`# <TAPE>`; no context switch or `finish` made them durable. The artifacts are
+therefore evidence of incremental design behavior, not an adopted candidate.

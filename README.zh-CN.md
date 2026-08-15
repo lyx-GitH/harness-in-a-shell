@@ -158,6 +158,14 @@ runner 刻意不解析它，也不会把 agent 控制的日志渲染到 terminal
 另一个可丢弃、无网络的 sandbox 中检查；不要直接在 host 上执行或 `source` 恢复出的
 文件。
 
+纵向实验可以设置 `OPENAI_CHECKPOINT_AFTER_REQUESTS=N`：下一个合法请求会在计数和
+发送到上游之前暂停。Host 先保存该请求的精确 `input`（即当前 `$SELF`）、SHA-256
+和进程表，再放行同一个请求，因此后半段仍由同一个 Bash 生命周期继续。该值只适用于
+`run`，并且必须小于 `OPENAI_MAX_REQUESTS`。若实验中不希望 agent 看到仓库内的其他
+文档，可通过 `SANDBOX_AGENT_DOCKERFILE` 选择仅供 `run` 使用的
+`sandbox/Dockerfile.agent-react-only`，同时用 `SANDBOX_AGENT_IMAGE` 指定独立 tag；
+该 image 只会把 `ReAct.sh` 复制到 `/seed`。
+
 `SANDBOX_BASE_IMAGE` 和 `SANDBOX_BUILD_PROXY` 是给离线 image cache 或本地 package
 proxy 使用的 build-only escape hatch；它们不改变 runtime 网络策略，proxy 值也不会
 被写进最终 image。两个本地 image 都构建完成后，`SANDBOX_SKIP_BUILD=1` 会跳过所有

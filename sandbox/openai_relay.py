@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
+import hashlib
 import http.client
 import json
 import os
 import socketserver
 import ssl
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
@@ -14,6 +16,10 @@ SOCKET_PATH = os.environ.get(
     "OPENAI_RELAY_SOCKET", "/run/openai-relay/openai.sock"
 )
 REQUEST_COUNT_PATH = "/tmp/openai-request-count"
+PAUSE_READY_PATH = "/tmp/openai-pause-ready"
+PAUSE_RELEASE_PATH = "/tmp/openai-pause-release"
+PAUSE_INPUT_PATH = "/tmp/openai-pause-input"
+PAUSE_INPUT_SHA256_PATH = "/tmp/openai-pause-input-sha256"
 
 
 def positive_int(name: str, default: int) -> int:
@@ -38,6 +44,11 @@ ALLOWED_REASONING_EFFORTS = {
 if REASONING_EFFORT not in ALLOWED_REASONING_EFFORTS:
     raise ValueError("OPENAI_REASONING_EFFORT is invalid")
 MAX_REQUESTS = positive_int("OPENAI_MAX_REQUESTS", 8)
+PAUSE_AFTER_REQUESTS = int(os.environ.get("OPENAI_PAUSE_AFTER_REQUESTS") or "0")
+if PAUSE_AFTER_REQUESTS < 0 or PAUSE_AFTER_REQUESTS >= MAX_REQUESTS:
+    raise ValueError(
+        "OPENAI_PAUSE_AFTER_REQUESTS must be zero or less than OPENAI_MAX_REQUESTS"
+    )
 MAX_BODY_BYTES = positive_int("OPENAI_MAX_BODY_BYTES", 512 * 1024)
 MAX_OUTPUT_TOKENS = positive_int("OPENAI_MAX_OUTPUT_TOKENS", 4 * 1024)
 MAX_RESPONSE_BYTES = positive_int("OPENAI_MAX_RESPONSE_BYTES", 32 * 1024 * 1024)
@@ -70,6 +81,7 @@ class RelayHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.0"
     server_version = "react-openai-relay/1"
     request_count = 0
+    pause_completed = False
 
     def setup(self) -> None:
         super().setup()
@@ -90,6 +102,36 @@ class RelayHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def wait_for_checkpoint_release(self, input_text: str) -> None:
+        if not (
+            PAUSE_AFTER_REQUESTS
+            and RelayHandler.request_count == PAUSE_AFTER_REQUESTS
+            and not RelayHandler.pause_completed
+        ):
+            return
+
+        input_bytes = input_text.encode("utf-8")
+        temporary_input_path = PAUSE_INPUT_PATH + ".tmp"
+        with open(temporary_input_path, "wb") as input_file:
+            input_file.write(input_bytes)
+        os.replace(temporary_input_path, PAUSE_INPUT_PATH)
+
+        input_hash = hashlib.sha256(input_bytes).hexdigest()
+        temporary_hash_path = PAUSE_INPUT_SHA256_PATH + ".tmp"
+        with open(temporary_hash_path, "w", encoding="ascii") as hash_file:
+            hash_file.write(f"{input_hash}\n")
+        os.replace(temporary_hash_path, PAUSE_INPUT_SHA256_PATH)
+
+        temporary_path = PAUSE_READY_PATH + ".tmp"
+        with open(temporary_path, "w", encoding="ascii") as ready_file:
+            ready_file.write(f"{RelayHandler.request_count}\n")
+        os.replace(temporary_path, PAUSE_READY_PATH)
+        while not os.path.exists(PAUSE_RELEASE_PATH):
+            time.sleep(0.1)
+        os.unlink(PAUSE_RELEASE_PATH)
+        os.unlink(PAUSE_READY_PATH)
+        RelayHandler.pause_completed = True
 
     def do_GET(self) -> None:
         if self.path != "/healthz":
@@ -154,6 +196,8 @@ class RelayHandler(BaseHTTPRequestHandler):
         if request["model"] != ALLOWED_MODEL:
             self.reply(403, f"only model {ALLOWED_MODEL!r} is allowed")
             return
+
+        self.wait_for_checkpoint_release(request["input"])
 
         if RelayHandler.request_count >= MAX_REQUESTS:
             self.reply(429, "sandbox request limit reached")

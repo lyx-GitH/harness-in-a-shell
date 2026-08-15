@@ -47,6 +47,17 @@
 - Cost-conscious sandbox defaults are 8 upstream attempts and 4096 output
   tokens per attempt. The relay's trusted `/tmp/openai-request-count` is copied
   into each non-test run directory for audit without trusting agent output.
+- For a self-contained run whose only project payload is the harness, use
+  `sandbox/Dockerfile.agent-react-only` with a distinct
+  `SANDBOX_AGENT_IMAGE`; it copies only `ReAct.sh` into `/seed`. Runtime tools,
+  the entrypoint, generated Git metadata, `.home`, and `.sandbox.log` remain
+  infrastructure rather than project context.
+- `OPENAI_CHECKPOINT_AFTER_REQUESTS=N` blocks the next valid request before
+  count increment or upstream forwarding. The relay atomically retains that
+  request's exact `input` and SHA-256; the host saves them plus a process table
+  and releases the same request, preserving one Bash lifetime. Treat this as an
+  API-response boundary: model output containing multiple non-tail `reason`
+  calls can still make request count diverge from clean action-round count.
 - `OPENAI_REASONING_EFFORT` is an optional trusted relay-side experiment knob;
   the agent cannot supply or override it. An empty value preserves the model
   default. Each run records trusted `model` and `reasoning-effort` metadata.
@@ -64,6 +75,13 @@
   publication awareness but remained incomplete and retained 207 raw
   observations. Both trials are preserved under `experiments/`; neither was
   adopted.
+- A separate ReAct-only Sol `xhigh` run used 16 admitted requests and a
+  10000-token output cap. It incrementally fixed `observe` framing, tested image
+  validation, hardened `edit_context`/`finish`, and sanitized child Bash
+  startup. It never switched context or finished, so all changes remained
+  after `<TAPE>` and none were adopted. Its duplicate/non-tail `reason` calls
+  also demonstrate that an API request cap is not necessarily a clean agent
+  round count. The trace is preserved under `experiments/`.
 - This host's legacy macOS 12.5.1 / Docker Desktop 4.9.1 stack is acceptable only
   for stub/verification convenience, not as the sole boundary for live arbitrary
   Bash. Use a no-sharing disposable UTM Linux VM now, or Docker Sandboxes clone

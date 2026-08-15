@@ -173,6 +173,16 @@ A normal run writes a gzip tar stream to `untrusted-output.bin`, but arbitrary
 Bash can corrupt or forge it. Inspect it only inside another disposable,
 no-network sandbox, and never execute or source recovered files on the host.
 
+For a longitudinal run, set `OPENAI_CHECKPOINT_AFTER_REQUESTS=N` to hold the
+next valid request before it is counted or sent upstream. The host records the
+exact request `input` (the current `$SELF`), its SHA-256, and a process table,
+then releases the same request so the same Bash lifetime continues. The value
+is valid only for `run` and must be below `OPENAI_MAX_REQUESTS`. To exclude all
+other repository documents from an agent experiment, select the run-only
+`sandbox/Dockerfile.agent-react-only` with `SANDBOX_AGENT_DOCKERFILE` and give
+it a distinct `SANDBOX_AGENT_IMAGE` tag; that image copies only `ReAct.sh` into
+`/seed`.
+
 `SANDBOX_BASE_IMAGE` and `SANDBOX_BUILD_PROXY` are build-only escape hatches
 for an offline cache or a local package proxy. They do not change the runtime
 network policy and the proxy value is not baked into the resulting image. Once

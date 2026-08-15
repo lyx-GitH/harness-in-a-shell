@@ -1,0 +1,27 @@
+ARG BASE_IMAGE=debian:bookworm-slim
+FROM ${BASE_IMAGE}
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        coreutils \
+        curl \
+        findutils \
+        git \
+        grep \
+        jq \
+        sed \
+        tar \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /seed
+COPY ReAct.sh /seed/ReAct.sh
+COPY sandbox/agent-entrypoint.sh /usr/local/bin/react-sandbox-entrypoint
+RUN chmod 0555 /usr/local/bin/react-sandbox-entrypoint \
+    && chmod -R a=rX /seed
+
+ENV HOME=/work/.home
+USER 65532:65532
+WORKDIR /work
+ENTRYPOINT ["/usr/local/bin/react-sandbox-entrypoint"]
