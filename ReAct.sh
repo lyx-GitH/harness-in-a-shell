@@ -49,65 +49,13 @@
 #
 # If you do not call reason again, the current agent lifetime ends.
 #
-# ACTIVE MUTATION RULE
+# SCRIPT AS CONTEXT
 #
-# While another reasoning step may occur, $SELF is strictly append-only.
-# Do not rewrite, truncate, replace, rename, or use sed -i on $SELF while the
-# task is active. Rewriting its pathname can split Bash's execution stream
-# from the file reopened by reason.
-#
-# You may freely modify other files.
-#
-# CONTEXT SWITCH
-#
-# You may replace the active agent image to compress context, discard obsolete
-# trajectory, consolidate tools, or redesign the harness.
-#
-# Create a COMPLETE new shell image in another file. It must reconstruct
-# everything required after the switch:
-#
-#   - these governing semantics;
-#   - SELF, ROOT, CANONICAL, and runtime initialization;
-#   - observe, compact, and reason, or evolved replacements;
-#   - API invocation machinery needed by reason;
-#   - useful evolved tools;
-#   - the current # INPUT task;
-#   - compressed task memory still needed;
-#   - a # <TAPE> boundary and a reason call that resumes execution.
-#
-# Pass that complete source to compact as a heredoc:
-#
-#   compact <<'NEXT_IMAGE'
-#   #!/usr/bin/env bash
-#   ...complete new image...
-#   NEXT_IMAGE
-#
-# Call compact directly, never as part of a pipeline: a pipeline may run it in
-# a subshell, so exec would replace only that subshell. Quote the heredoc marker
-# so the old shell does not expand variables or substitutions in the new image.
-#
-# compact creates a uniquely named sibling image, writes stdin into it, and
-# replaces the current Bash process. It is safe to compact repeatedly: every
-# generation receives a fresh pathname rather than truncating its own $SELF.
-# Ordinary functions and non-exported variables from the old image do not
-# survive; reconstruct them in the new image. Files, environment, working
-# directory, and external processes remain part of the surrounding
-# operating-system state unless explicitly changed.
-#
-# FINALIZATION / SELF-EVOLUTION
-#
-# When the task is complete, consolidate what was learned into a clean,
-# reusable next generation and install it at $CANONICAL. Finalization is the
-# only phase where the running or canonical image may be rewritten.
-#
-# Preserve useful general improvements to tools, the harness, and reason.
-# Remove task-specific # INPUT lines, observations, actions, temporary memory,
-# obsolete implementations, and anything that would replay the completed task.
-# Promote useful evolved tools from the trajectory into the reusable image.
-#
-# The final canonical file must be bootable for a fresh task and end cleanly at
-# its # <TAPE> marker. After canonicalizing $CANONICAL: never call reason again,
-# emit no further stdout, perform no further task actions, and exit.
+# This entire script is context. Function-adjacent comments describe the tools'
+# semantics and are part of that context, not external documentation. In
+# particular, the contract for changing this script lives beside edit_context.
+# Treat those comments as governing semantics and evolve them together with the
+# implementation they describe.
 #
 # CORE SEMANTICS
 #
@@ -115,7 +63,7 @@
 # Bash comments       = observations / declarative state
 # appended Bash       = working memory + future execution
 # function redefine   = incremental tool evolution
-# complete image + compact = context switch / context compression
+# complete image + edit_context = context editing / context compression
 # final canonicalize  = durable self-evolution across tasks
 #
 # Everything, including reasoning itself, is part of the shell image.
@@ -138,7 +86,44 @@ observe() {
     printf '# EXIT: %d\n' "$__react_observe_status"
 }
 
-compact() {
+# EDIT_CONTEXT CONTRACT
+#
+# The script is the context. edit_context replaces the complete active script,
+# so it is the mechanism for any structural self-edit: changing the SYSTEM
+# prompt, compressing or reorganizing trajectory, consolidating tools, changing
+# reason, or redesigning the harness. Compression is only one possible edit.
+#
+# While another reasoning step may occur, $SELF is append-only. Never rewrite,
+# truncate, replace, rename, or use sed -i on it: changing its pathname can
+# split Bash's execution stream from the file reopened by reason. You may freely
+# modify other files. To edit active context, provide a COMPLETE replacement
+# image to this function:
+#
+#   edit_context <<'NEW_CONTEXT'
+#   #!/usr/bin/env bash
+#   ...complete replacement script...
+#   NEW_CONTEXT
+#
+# The replacement must reconstruct everything needed after the edit: governing
+# semantics and their function-adjacent comments; SELF, ROOT, and CANONICAL;
+# observe, edit_context, reason, and API machinery; useful evolved tools; the
+# current # INPUT; compressed task memory; a # <TAPE> boundary; and a reason
+# call that resumes execution.
+#
+# Call edit_context directly, never in a pipeline: a pipeline may run it in a
+# subshell, so exec would replace only that subshell. Quote the heredoc marker
+# so the old shell cannot expand variables or substitutions in the new script.
+# Each edit receives a fresh sibling pathname, so repeated edits never truncate
+# the currently executing $SELF. exec preserves the process but ordinary
+# functions and non-exported variables do not survive; reconstruct them.
+#
+# When the task is complete, consolidate reusable improvements into a clean
+# fresh-task image and install it at $CANONICAL. Remove task-specific input,
+# observations, actions, temporary memory, and anything that would replay the
+# completed task. The canonical file must end cleanly at # <TAPE>. Then never
+# call reason again, emit no further stdout, perform no further actions, and
+# exit.
+edit_context() {
     local __react_next
 
     __react_next="$(mktemp "$ROOT/.react.image.XXXXXX")" || return

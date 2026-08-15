@@ -72,11 +72,11 @@ observe tool
 printf '# TOOL_STATE: %s\n' "$TOOL_STATE"
 
 printf '# BEFORE_PID: %s\n' "$$"
-compact <<'FIRST_IMAGE'
+edit_context <<'FIRST_IMAGE'
 #!/usr/bin/env bash
 
 # <SYSTEM>
-# This is the first self-contained context-switch test image.
+# This is the first self-contained context-edit test image.
 # </SYSTEM>
 
 ROOT="$(cd "$(dirname "$0")" && pwd -P)" || exit 1
@@ -84,7 +84,8 @@ SELF="$ROOT/$(basename "$0")"
 CANONICAL="$ROOT/ReAct.sh"
 
 observe() { "$@"; }
-compact() {
+# Replace this complete script from a quoted heredoc using a unique sibling.
+edit_context() {
     local __react_next
 
     __react_next="$(mktemp "$ROOT/.react.image.XXXXXX")" || return
@@ -96,11 +97,11 @@ reason() {
     cat <<'FIRST_CONTINUATION'
 printf '# FIRST_SWITCH_PID: %s\n' "$$"
 printf '# FIRST_SWITCH_SELF: %s\n' "$SELF"
-compact <<'SECOND_IMAGE'
+edit_context <<'SECOND_IMAGE'
 #!/usr/bin/env bash
 
 # <SYSTEM>
-# This is the second self-contained context-switch test image.
+# This is the second self-contained context-edit test image.
 # </SYSTEM>
 
 ROOT="$(cd "$(dirname "$0")" && pwd -P)" || exit 1
@@ -108,7 +109,8 @@ SELF="$ROOT/$(basename "$0")"
 CANONICAL="$ROOT/ReAct.sh"
 
 observe() { "$@"; }
-compact() {
+# Replace this complete script from a quoted heredoc using a unique sibling.
+edit_context() {
     local __react_next
 
     __react_next="$(mktemp "$ROOT/.react.image.XXXXXX")" || return
@@ -123,7 +125,7 @@ reason() {
 }
 
 # INPUT: [compressed twice] exercise append semantics
-# MEMORY: first compacted trajectory compressed again
+# MEMORY: first edited trajectory compressed again
 reason
 
 # <TAPE>
@@ -158,15 +160,15 @@ STUB_STATE="$TMP_ROOT/stub-state" \
     >> "$TMP_ROOT/ReAct.sh"
 
 image_count="$(find "$TMP_ROOT" -maxdepth 1 -type f -name '.react.image.*' | wc -l | tr -d ' ')"
-[[ "$image_count" == 2 ]] || fail "expected two context-switch images; got $image_count"
+[[ "$image_count" == 2 ]] || fail "expected two edited context images; got $image_count"
 
 FIRST_IMAGE="$(grep -l '^# FIRST_SWITCH_PID: ' "$TMP_ROOT"/.react.image.* || true)"
 SECOND_IMAGE="$(grep -l '^# SECOND_SWITCH_PID: ' "$TMP_ROOT"/.react.image.* || true)"
-[[ -n "$FIRST_IMAGE" ]] || fail "first context-switch image was not identified"
-[[ -n "$SECOND_IMAGE" ]] || fail "second context-switch image was not identified"
-[[ "$FIRST_IMAGE" != "$SECOND_IMAGE" ]] || fail "both compactions reused the same image"
+[[ -n "$FIRST_IMAGE" ]] || fail "first edited context image was not identified"
+[[ -n "$SECOND_IMAGE" ]] || fail "second edited context image was not identified"
+[[ "$FIRST_IMAGE" != "$SECOND_IMAGE" ]] || fail "both context edits reused the same image"
 [[ "$FIRST_IMAGE" != "$TMP_ROOT/ReAct.sh" && "$SECOND_IMAGE" != "$TMP_ROOT/ReAct.sh" ]] ||
-    fail "compaction reused the currently running image"
+    fail "context edit reused the currently running image"
 
 "$BASH_UNDER_TEST" -n "$TMP_ROOT/ReAct.sh"
 "$BASH_UNDER_TEST" -n "$FIRST_IMAGE"
@@ -208,4 +210,4 @@ second_self="$(sed -n 's/^# SECOND_SWITCH_SELF: //p' "$SECOND_IMAGE")"
 [[ "$second_self" == "$SECOND_IMAGE" ]] ||
     fail "second image saw SELF as $second_self, expected $SECOND_IMAGE"
 
-printf 'ok: append execution, function evolution, observations, and repeated compaction\n'
+printf 'ok: append execution, function evolution, observations, and repeated context editing\n'

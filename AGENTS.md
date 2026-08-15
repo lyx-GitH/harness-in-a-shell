@@ -11,6 +11,6 @@
 - The host macOS lacks `realpath` and currently lacks `jq`. Path initialization
   therefore uses `cd` plus `pwd -P`; live API runs require installing `jq`.
 - During an active task, the running image is append-only. Context compression
-  passes another complete image to `compact`, which selects a unique
-  `.react.image.*` path and switches with `exec`; only finalization rewrites the
-  canonical image.
+  or structural self-editing passes another complete image to `edit_context`,
+  which selects a unique `.react.image.*` path and switches with `exec`; only
+  finalization rewrites the canonical image.
