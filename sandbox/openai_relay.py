@@ -25,6 +25,18 @@ def positive_int(name: str, default: int) -> int:
 
 API_KEY = os.environ["OPENAI_API_KEY"]
 ALLOWED_MODEL = os.environ.get("OPENAI_ALLOWED_MODEL", "gpt-5.6-sol")
+REASONING_EFFORT = os.environ.get("OPENAI_REASONING_EFFORT", "")
+ALLOWED_REASONING_EFFORTS = {
+    "",
+    "none",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+}
+if REASONING_EFFORT not in ALLOWED_REASONING_EFFORTS:
+    raise ValueError("OPENAI_REASONING_EFFORT is invalid")
 MAX_REQUESTS = positive_int("OPENAI_MAX_REQUESTS", 8)
 MAX_BODY_BYTES = positive_int("OPENAI_MAX_BODY_BYTES", 512 * 1024)
 MAX_OUTPUT_TOKENS = positive_int("OPENAI_MAX_OUTPUT_TOKENS", 4 * 1024)
@@ -157,6 +169,8 @@ class RelayHandler(BaseHTTPRequestHandler):
             "store": False,
             "stream": False,
         }
+        if REASONING_EFFORT:
+            upstream_request["reasoning"] = {"effort": REASONING_EFFORT}
         upstream_body = json.dumps(upstream_request, separators=(",", ":")).encode(
             "utf-8"
         )

@@ -47,10 +47,17 @@
 - Cost-conscious sandbox defaults are 8 upstream attempts and 4096 output
   tokens per attempt. The relay's trusted `/tmp/openai-request-count` is copied
   into each non-test run directory for audit without trusting agent output.
+- `OPENAI_REASONING_EFFORT` is an optional trusted relay-side experiment knob;
+  the agent cannot supply or override it. An empty value preserves the model
+  default. Each run records trusted `model` and `reasoning-effort` metadata.
 - A 2026-08-15 live terra trial was sandbox validation only. Its syntactically
   valid candidate omitted the closing `# </SYSTEM>` marker and was not adopted;
   model-produced candidates must remain test artifacts unless the user asks to
   merge them.
+- A later 2026-08-15 terra `xhigh` trial with `improve this harness step by step`
+  used all 8 requests and did perform incremental audits, but its canonical
+  candidate removed the prompt/bootstrap `reason` call and leaked `# OBS:`
+  lines before `# <TAPE>`. It failed `test.sh` and was not adopted.
 - This host's legacy macOS 12.5.1 / Docker Desktop 4.9.1 stack is acceptable only
   for stub/verification convenience, not as the sole boundary for live arbitrary
   Bash. Use a no-sharing disposable UTM Linux VM now, or Docker Sandboxes clone

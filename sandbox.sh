@@ -9,6 +9,7 @@ AGENT_IMAGE=harness-in-a-shell-agent:local
 RELAY_IMAGE=harness-in-a-shell-relay:local
 
 : "${OPENAI_MODEL:=gpt-5.6-sol}"
+: "${OPENAI_REASONING_EFFORT:=}"
 : "${SANDBOX_TIMEOUT_SECONDS:=300}"
 : "${SANDBOX_MEMORY:=512m}"
 : "${SANDBOX_WORK_SIZE:=256m}"
@@ -83,6 +84,13 @@ normalize_positive_int() {
 normalize_positive_int SANDBOX_TIMEOUT_SECONDS "$SANDBOX_TIMEOUT_SECONDS"
 normalize_positive_int OPENAI_MAX_REQUESTS "$OPENAI_MAX_REQUESTS"
 normalize_positive_int OPENAI_MAX_OUTPUT_TOKENS "$OPENAI_MAX_OUTPUT_TOKENS"
+
+case "$OPENAI_REASONING_EFFORT" in
+    ''|none|low|medium|high|xhigh|max) ;;
+    *)
+        die "OPENAI_REASONING_EFFORT must be one of: none, low, medium, high, xhigh, max"
+        ;;
+esac
 
 command -v docker >/dev/null 2>&1 || die "docker is not installed"
 docker info >/dev/null 2>&1 ||
@@ -199,6 +207,7 @@ if [[ "$MODE" != test ]]; then
         --log-opt compress=false \
         -e OPENAI_API_KEY \
         -e OPENAI_ALLOWED_MODEL="$OPENAI_MODEL" \
+        -e OPENAI_REASONING_EFFORT="$OPENAI_REASONING_EFFORT" \
         -e OPENAI_MAX_REQUESTS="$OPENAI_MAX_REQUESTS" \
         -e OPENAI_MAX_OUTPUT_TOKENS="$OPENAI_MAX_OUTPUT_TOKENS" \
         "$RELAY_IMAGE" >/dev/null
@@ -342,6 +351,8 @@ printf '%s\n' "$container_status" > "$RUN_DIR/container-exit-code"
 if [[ -n "$relay_request_count" ]]; then
     printf '%s\n' "$relay_request_count" > "$RUN_DIR/openai-request-count"
 fi
+printf '%s\n' "$OPENAI_MODEL" > "$RUN_DIR/model"
+printf '%s\n' "${OPENAI_REASONING_EFFORT:-default}" > "$RUN_DIR/reasoning-effort"
 
 if [[ "$container_status" == 0 ]]; then
     printf 'sandbox: %s completed successfully\n' "$MODE"
@@ -351,6 +362,8 @@ fi
 if [[ "$MODE" == run ]]; then
     printf 'sandbox: OpenAI requests attempted: %s (limit %s)\n' \
         "$relay_request_count" "$OPENAI_MAX_REQUESTS"
+    printf 'sandbox: model %s; reasoning effort %s\n' \
+        "$OPENAI_MODEL" "${OPENAI_REASONING_EFFORT:-default}"
 fi
 printf 'sandbox: container exit %s; quarantined artifacts: %s\n' \
     "$container_status" "$RUN_DIR"

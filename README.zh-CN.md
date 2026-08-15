@@ -147,8 +147,11 @@ bash sandbox.sh run '检查 harness，然后干净地 finish。'
 
 可以通过 `SANDBOX_TIMEOUT_SECONDS`、`SANDBOX_MEMORY`、
 `SANDBOX_WORK_SIZE`、`OPENAI_MAX_REQUESTS` 和
-`OPENAI_MAX_OUTPUT_TOKENS` 调整边界。默认最多尝试 8 次 API 调用、每次最多 4096 个
-输出 token；受信 relay 会把实际尝试次数写进每个 run 目录。Container 输出有磁盘
+`OPENAI_MAX_OUTPUT_TOKENS` 调整边界。做受控模型实验时，
+`OPENAI_REASONING_EFFORT` 可以设为 `none`、`low`、`medium`、`high`、`xhigh` 或
+`max`；不设置时保留模型默认值。该配置只由受信 relay 注入，不会暴露给 agent。默认
+最多尝试 8 次 API 调用、每次最多 4096 个输出 token；受信 relay 会把实际尝试次数、
+模型和 reasoning effort 写进每个 run 目录。Container 输出有磁盘
 上限，并原样保存在 `sandbox-runs/run.*/untrusted-{output,stderr}.bin`；受信 host
 runner 刻意不解析它，也不会把 agent 控制的日志渲染到 terminal。正常运行会向
 `untrusted-output.bin` 写出 gzip tar stream，但任意 Bash 可以破坏或伪造它。只能在
