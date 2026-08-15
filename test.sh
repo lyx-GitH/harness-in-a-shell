@@ -59,6 +59,11 @@ edit_context <<'FINAL_ACTIVE_CONTEXT'
 ROOT="$(cd "$(dirname "$0")" && pwd -P)" || exit 1
 SELF="$ROOT/$(basename "$0")"
 CANONICAL="$ROOT/ReAct.sh"
+if [[ "$SELF" != "$CANONICAL" && -e "$CANONICAL" ]]; then
+    __react_round="$(mktemp "$ROOT/.react.round.XXXXXX")" || exit 1
+    mv -f "$CANONICAL" "$__react_round" || exit 1
+    unset __react_round
+fi
 observe() { "$@"; }
 # </SYSTEM>
 
@@ -131,6 +136,11 @@ edit_context <<'FIRST_IMAGE'
 ROOT="$(cd "$(dirname "$0")" && pwd -P)" || exit 1
 SELF="$ROOT/$(basename "$0")"
 CANONICAL="$ROOT/ReAct.sh"
+if [[ "$SELF" != "$CANONICAL" && -e "$CANONICAL" ]]; then
+    __react_round="$(mktemp "$ROOT/.react.round.XXXXXX")" || exit 1
+    mv -f "$CANONICAL" "$__react_round" || exit 1
+    unset __react_round
+fi
 observe() { "$@"; }
 # </SYSTEM>
 
@@ -155,6 +165,11 @@ edit_context <<'SECOND_IMAGE'
 ROOT="$(cd "$(dirname "$0")" && pwd -P)" || exit 1
 SELF="$ROOT/$(basename "$0")"
 CANONICAL="$ROOT/ReAct.sh"
+if [[ "$SELF" != "$CANONICAL" && -e "$CANONICAL" ]]; then
+    __react_round="$(mktemp "$ROOT/.react.round.XXXXXX")" || exit 1
+    mv -f "$CANONICAL" "$__react_round" || exit 1
+    unset __react_round
+fi
 observe() { "$@"; }
 # </SYSTEM>
 
@@ -211,6 +226,11 @@ STUB_STATE="$TMP_ROOT/stub-state" \
 image_count="$(find "$TMP_ROOT" -maxdepth 1 -type f -name '.react.image.*' | wc -l | tr -d ' ')"
 [[ "$image_count" == 2 ]] || fail "expected two edited context images; got $image_count"
 
+round_count="$(find "$TMP_ROOT" -maxdepth 1 -type f -name '.react.round.*' | wc -l | tr -d ' ')"
+[[ "$round_count" == 1 ]] || fail "expected one de-canonicalized round; got $round_count"
+ROUND_IMAGE="$(find "$TMP_ROOT" -maxdepth 1 -type f -name '.react.round.*')"
+[[ ! -e "$TMP_ROOT/ReAct.sh" ]] || fail "canonical path still exists during an active round"
+
 FIRST_IMAGE="$(grep -l '^# FIRST_SWITCH_PID: ' "$TMP_ROOT"/.react.image.* || true)"
 SECOND_IMAGE="$(grep -l '^# SECOND_SWITCH_PID: ' "$TMP_ROOT"/.react.image.* || true)"
 [[ -n "$FIRST_IMAGE" ]] || fail "first edited context image was not identified"
@@ -219,22 +239,22 @@ SECOND_IMAGE="$(grep -l '^# SECOND_SWITCH_PID: ' "$TMP_ROOT"/.react.image.* || t
 [[ "$FIRST_IMAGE" != "$TMP_ROOT/ReAct.sh" && "$SECOND_IMAGE" != "$TMP_ROOT/ReAct.sh" ]] ||
     fail "context edit reused the currently running image"
 
-"$BASH_UNDER_TEST" -n "$TMP_ROOT/ReAct.sh"
+"$BASH_UNDER_TEST" -n "$ROUND_IMAGE"
 "$BASH_UNDER_TEST" -n "$FIRST_IMAGE"
 "$BASH_UNDER_TEST" -n "$SECOND_IMAGE"
 
-assert_count 1 '^# INPUT: exercise append semantics$' "$TMP_ROOT/ReAct.sh"
-assert_count 1 '^# STUB_STEP: 1$' "$TMP_ROOT/ReAct.sh"
-assert_count 1 '^# STUB_STEP: 2$' "$TMP_ROOT/ReAct.sh"
-assert_count 1 '^# OBS: v1$' "$TMP_ROOT/ReAct.sh"
-assert_count 1 '^# OBS: v2$' "$TMP_ROOT/ReAct.sh"
-assert_count 1 '^# TOOL_STATE: v1$' "$TMP_ROOT/ReAct.sh"
-assert_count 1 '^# TOOL_STATE: v2$' "$TMP_ROOT/ReAct.sh"
-assert_count 1 '^# EXIT: 0$' "$TMP_ROOT/ReAct.sh"
-assert_count 1 '^# EXIT: 7$' "$TMP_ROOT/ReAct.sh"
-assert_count 1 '^# BEFORE_PID: ' "$TMP_ROOT/ReAct.sh"
-assert_count 0 '^# FIRST_SWITCH_PID: ' "$TMP_ROOT/ReAct.sh"
-assert_count 0 '^# SECOND_SWITCH_PID: ' "$TMP_ROOT/ReAct.sh"
+assert_count 1 '^# INPUT: exercise append semantics$' "$ROUND_IMAGE"
+assert_count 1 '^# STUB_STEP: 1$' "$ROUND_IMAGE"
+assert_count 1 '^# STUB_STEP: 2$' "$ROUND_IMAGE"
+assert_count 1 '^# OBS: v1$' "$ROUND_IMAGE"
+assert_count 1 '^# OBS: v2$' "$ROUND_IMAGE"
+assert_count 1 '^# TOOL_STATE: v1$' "$ROUND_IMAGE"
+assert_count 1 '^# TOOL_STATE: v2$' "$ROUND_IMAGE"
+assert_count 1 '^# EXIT: 0$' "$ROUND_IMAGE"
+assert_count 1 '^# EXIT: 7$' "$ROUND_IMAGE"
+assert_count 1 '^# BEFORE_PID: ' "$ROUND_IMAGE"
+assert_count 0 '^# FIRST_SWITCH_PID: ' "$ROUND_IMAGE"
+assert_count 0 '^# SECOND_SWITCH_PID: ' "$ROUND_IMAGE"
 assert_count 1 '^# FIRST_SWITCH_PID: ' "$FIRST_IMAGE"
 assert_count 1 '^# FIRST_SWITCH_SELF: ' "$FIRST_IMAGE"
 assert_count 0 '^# SECOND_SWITCH_PID: ' "$FIRST_IMAGE"
@@ -246,7 +266,7 @@ assert_count 1 '^# INPUT: \[compressed twice\] exercise append semantics$' "$SEC
 assert_count 1 '^# <TAPE>$' "$SECOND_IMAGE"
 assert_count 1 '^: "second image resumed"$' "$SECOND_IMAGE"
 
-before_pid="$(sed -n 's/^# BEFORE_PID: //p' "$TMP_ROOT/ReAct.sh")"
+before_pid="$(sed -n 's/^# BEFORE_PID: //p' "$ROUND_IMAGE")"
 first_pid="$(sed -n 's/^# FIRST_SWITCH_PID: //p' "$FIRST_IMAGE")"
 second_pid="$(sed -n 's/^# SECOND_SWITCH_PID: //p' "$SECOND_IMAGE")"
 [[ "$before_pid" == "$first_pid" && "$first_pid" == "$second_pid" ]] ||
@@ -280,6 +300,13 @@ cmp -s "$RUNNING_IMAGE" "$FINISH_ROOT/ReAct.sh" &&
 assert_count 1 '^# INPUT: exercise finish semantics$' "$RUNNING_IMAGE"
 assert_count 1 "^edit_context <<'FINAL_ACTIVE_CONTEXT'$" "$RUNNING_IMAGE"
 
+finish_round_count="$(find "$FINISH_ROOT" -maxdepth 1 -type f -name '.react.round.*' | wc -l | tr -d ' ')"
+[[ "$finish_round_count" == 1 ]] ||
+    fail "expected one archived finish round; got $finish_round_count"
+FINISH_ROUND_IMAGE="$(find "$FINISH_ROOT" -maxdepth 1 -type f -name '.react.round.*')"
+cmp -s "$RUNNING_IMAGE" "$FINISH_ROUND_IMAGE" ||
+    fail "de-canonicalized round does not preserve the task-bearing ReAct.sh"
+
 finish_image_count="$(find "$FINISH_ROOT" -maxdepth 1 -type f -name '.react.image.*' | wc -l | tr -d ' ')"
 [[ "$finish_image_count" == 1 ]] ||
     fail "expected one final active context; got $finish_image_count"
@@ -305,4 +332,4 @@ final_staging_count="$(find "$FINISH_ROOT" -maxdepth 1 -name '.react.final.*' | 
 [[ "$final_staging_count" == 0 ]] ||
     fail "finish left $final_staging_count staging files after installation"
 
-printf 'ok: append execution, tool evolution, repeated context editing, and finish\n'
+printf 'ok: append execution, tool evolution, context editing, round lifecycle, and finish\n'

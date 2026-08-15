@@ -36,7 +36,7 @@ CANONICAL="$ROOT/ReAct.sh"
 # The trajectory after <TAPE> is working state, not necessarily durable
 # memory. Bash variables and functions remain live in the current process.
 #
-# TOOL MODEL
+# FUNCTION AS TOOL
 #
 # Bash functions are tools. You may call existing functions, define new ones,
 # and redefine old ones. A redefinition affects later execution in this image.
@@ -82,6 +82,26 @@ observe() {
 # edit_context and finish. Treat those comments as governing semantics and
 # evolve them together with the implementation they describe.
 #
+# FILE AS ROUND
+#
+# A round begins when a task is appended to canonical ReAct.sh. Before any
+# switch, that pathname is also the active file. The round may then migrate
+# through multiple images, but it ends only when finish installs the next
+# canonical ReAct.sh. Once execution leaves ReAct.sh, its pathname must not keep
+# pointing to an earlier active image from the current round.
+#
+# Therefore the first image reached after leaving ReAct.sh must immediately
+# de-canonicalize the previous ReAct.sh after the switch. This initialization
+# archives it under a unique round pathname and leaves no canonical file until
+# finish completes the round. Later switches see no canonical file and do
+# nothing.
+#
+if [[ "$SELF" != "$CANONICAL" && -e "$CANONICAL" ]]; then
+    __react_round="$(mktemp "$ROOT/.react.round.XXXXXX")" || exit 1
+    mv -f "$CANONICAL" "$__react_round" || exit 1
+    unset __react_round
+fi
+
 # CORE SEMANTICS
 #
 # Bash functions      = tools
@@ -90,6 +110,7 @@ observe() {
 # function redefine   = incremental tool evolution
 # complete image + edit_context = context editing / context compression
 # complete image + finish = durable self-evolution across tasks
+# canonical ReAct.sh = completed round boundary
 #
 # Everything, including reasoning itself, is part of the shell image.
 # </SYSTEM>
@@ -124,7 +145,9 @@ observe() {
 # so the old shell cannot expand variables or substitutions in the new script.
 # Each edit receives a fresh sibling pathname, so repeated edits never truncate
 # the currently executing $SELF. exec preserves the process but ordinary
-# functions and non-exported variables do not survive; reconstruct them.
+# functions and non-exported variables do not survive; reconstruct them. The
+# FILE AS ROUND initialization in the new image automatically de-canonicalizes
+# ReAct.sh after the first switch of a round.
 edit_context() {
     local __react_next
 
