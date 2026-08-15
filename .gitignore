@@ -1,3 +1,7 @@
 .react.image.*
 .react.final.*
 .react.round.*
+.env
+.env.*
+sandbox-runs/
+__pycache__/

@@ -106,4 +106,96 @@ bash test.sh
 修改上下文、第一次 switch 后的 de-canonicalization、跨 `exec` 的 PID 连续性，以及
 `finish` 自动安装 canonical `ReAct.sh`。测试覆盖 Bash 3.2 和 Bash 5.1。
 
-这是一个刻意保持简单的研究原型，不是经过加固的 executor 或 sandbox。
+## 在可丢弃的 sandbox 中运行
+
+应把模型输出视为“任意 Bash”，而不只是“可能误操作的程序”。尤其不要把真实仓库、
+home 目录、凭证或 Docker socket bind-mount 给执行器。
+
+仓库附带了一个供本地实验使用的 container fallback。在 macOS 上先启动 Docker
+Desktop：
+
+```bash
+open -a Docker
+bash sandbox.sh test
+bash sandbox.sh verify
+```
+
+`test` 在完全断网、没有 key 的环境中运行 stub harness；`verify` 使用假 key 检查隔离
+策略。不可信 agent container 使用只读 root filesystem、受容量约束的 tmpfs、空 Linux
+capabilities、资源上限，而且没有 host bind mount、Docker socket、API key 或任何
+network。
+
+真实运行时，agent 只能通过位于只读挂载 volume 中的 Unix socket 访问很窄的 relay。
+真实 key 只在 relay 中；relay 只重建发往 `api.openai.com` 的
+`POST /v1/responses`，固定 model，拒绝额外 API 字段，关闭 hosted tools 和
+streaming，并限制每轮调用次数、request/response 大小、输出 token 和 wall-clock
+时间。独立的 host watchdog 才是最终期限；即使任意 Bash 攻击 container 内的
+`timeout`，也不能取消它。
+
+```text
+agent（任意 Bash；network=none；无 key）
+  └─ 位于只读挂载中的 Unix socket → 受信 relay
+                                  └─ TLS → api.openai.com/v1/responses
+```
+
+在受支持的 Docker 环境中运行：
+
+```bash
+export OPENAI_API_KEY='...'
+bash sandbox.sh run '检查 harness，然后干净地 finish。'
+```
+
+可以通过 `SANDBOX_TIMEOUT_SECONDS`、`SANDBOX_MEMORY`、
+`SANDBOX_WORK_SIZE`、`OPENAI_MAX_REQUESTS` 和
+`OPENAI_MAX_OUTPUT_TOKENS` 调整边界。默认最多尝试 8 次 API 调用、每次最多 4096 个
+输出 token；受信 relay 会把实际尝试次数写进每个 run 目录。Container 输出有磁盘
+上限，并原样保存在 `sandbox-runs/run.*/untrusted-{output,stderr}.bin`；受信 host
+runner 刻意不解析它，也不会把 agent 控制的日志渲染到 terminal。正常运行会向
+`untrusted-output.bin` 写出 gzip tar stream，但任意 Bash 可以破坏或伪造它。只能在
+另一个可丢弃、无网络的 sandbox 中检查；不要直接在 host 上执行或 `source` 恢复出的
+文件。
+
+`SANDBOX_BASE_IMAGE` 和 `SANDBOX_BUILD_PROXY` 是给离线 image cache 或本地 package
+proxy 使用的 build-only escape hatch；它们不改变 runtime 网络策略，proxy 值也不会
+被写进最终 image。两个本地 image 都构建完成后，`SANDBOX_SKIP_BUILD=1` 会跳过所有
+image build 网络访问；真实 `run` 仍会由 relay 调用 OpenAI API。只应在明确要测试
+已经构建好的 image 时使用。
+
+这台 Mac 目前是 macOS 12.5.1 + Docker Desktop 4.9.1；该组合已经停止支持，版本也
+过旧，不能作为真实任意 Bash agent 的唯一安全边界。因此 `sandbox.sh run` 默认会在
+这里拒绝运行。现在要实验，可以把同一套脚本放进可丢弃的 UTM Linux VM，并关闭 host
+目录、剪贴板、USB 和凭证共享。`ALLOW_LEGACY_DOCKER_SANDBOX=1` 只是明确接受研究
+风险的 override，不是推荐设置。
+
+### 更强的 microVM 方案
+
+升级到 macOS 14 或更高版本后，优先使用 Docker Sandboxes。先把网络策略初始化为
+默认拒绝；使用 clone mode，让工作副本只留在 microVM；OpenAI secret 只授权给这个
+sandbox；网络只放行 API host：
+
+```bash
+brew trust docker/tap
+brew install docker/tap/sbx
+sbx login
+sbx policy init deny-all
+
+sbx create shell "$PWD" --clone --no-share-skills --name react-harness --cpus 1 --memory 1g
+sbx secret set react-harness openai
+sbx policy allow network --sandbox react-harness api.openai.com:443
+sbx policy ls --wide
+sbx run --name react-harness
+```
+
+随后在 sandbox 内执行：
+
+```bash
+OPENAI_API_KEY=proxy-managed bash ReAct.sh '<prompt>' >> ReAct.sh
+```
+
+请使用只包含允许 agent 读取内容的 staging Git repository；clone mode 仍会把 source
+repository 以只读形式暴露给 VM。`--no-share-skills` 还会避免 sandbox 获得 Docker
+在 host 上共享的 skills store。只导出并审查你准备保留的单个结果，之后用
+`sbx rm react-harness` 删除整个 microVM。
+
+这仍然是研究原型。Canonicalization 只说明一轮已经结束，并不说明生成的 Bash 值得
+信任。

@@ -117,4 +117,104 @@ function evolution and shell-state persistence, repeated context edits,
 de-canonicalization after the first switch, PID continuity across `exec`, and
 automatic canonicalization through `finish` on Bash 3.2 and Bash 5.1.
 
-This is deliberately a research artifact, not a hardened executor or sandbox.
+## Run in a disposable sandbox
+
+Treat model output as arbitrary Bash, not merely as a program that might make a
+mistake. In particular, do not bind-mount the real repository, home directory,
+credentials, or a Docker socket into its executor.
+
+The repository includes a container fallback for local experiments. On macOS,
+start Docker Desktop first:
+
+```bash
+open -a Docker
+bash sandbox.sh test
+bash sandbox.sh verify
+```
+
+`test` runs the stub harness with no network or key. `verify` uses a fake key
+and checks the isolation policy. The untrusted agent container has a read-only
+root filesystem, bounded tmpfs, no Linux capabilities, resource limits, no host
+bind mounts, no Docker socket, no API key, and `network=none`.
+
+For a live run, the agent can only reach a narrow relay through a Unix socket on
+a read-only-mounted volume. The relay holds the real key, reconstructs only a
+`POST /v1/responses` request to `api.openai.com`, pins the model, rejects extra
+API fields, disables hosted tools and streaming, and enforces per-run request,
+body, response, output-token, and wall-clock limits. The independent host
+watchdog remains authoritative even if arbitrary Bash attacks its in-container
+timeout.
+
+```text
+agent (arbitrary Bash; network=none; no key)
+  └─ Unix socket on read-only mount → trusted relay
+                                      └─ TLS → api.openai.com/v1/responses
+```
+
+On a supported Docker installation, run it with:
+
+```bash
+export OPENAI_API_KEY='...'
+bash sandbox.sh run 'Inspect the harness and finish cleanly.'
+```
+
+Tune the bounds with `SANDBOX_TIMEOUT_SECONDS`, `SANDBOX_MEMORY`,
+`SANDBOX_WORK_SIZE`, `OPENAI_MAX_REQUESTS`, and
+`OPENAI_MAX_OUTPUT_TOKENS`. The cost-conscious defaults allow at most 8 API
+attempts and 4096 output tokens per attempt; the trusted relay records the
+actual attempt count in each run directory. Container output is disk-capped and
+retained under `sandbox-runs/run.*/untrusted-{output,stderr}.bin`; the trusted
+host runner deliberately does not parse it or render agent-controlled logs in
+the terminal.
+A normal run writes a gzip tar stream to `untrusted-output.bin`, but arbitrary
+Bash can corrupt or forge it. Inspect it only inside another disposable,
+no-network sandbox, and never execute or source recovered files on the host.
+
+`SANDBOX_BASE_IMAGE` and `SANDBOX_BUILD_PROXY` are build-only escape hatches
+for an offline cache or a local package proxy. They do not change the runtime
+network policy and the proxy value is not baked into the resulting image. Once
+both local images have been built, `SANDBOX_SKIP_BUILD=1` skips all image-build
+network access; a live `run` still calls the OpenAI API through the relay. Use it
+only when deliberately testing the already-built image.
+
+This Mac currently runs macOS 12.5.1 and Docker Desktop 4.9.1. That stack is no
+longer supported and is too old to be the sole boundary for a live arbitrary
+Bash agent, so `sandbox.sh run` refuses by default on it. For experiments today,
+run the same script inside a disposable UTM Linux VM with host directory,
+clipboard, USB, and credential sharing disabled. `ALLOW_LEGACY_DOCKER_SANDBOX=1`
+exists as an explicit research-risk override, not as a recommendation.
+
+### Stronger microVM setup
+
+After upgrading to macOS 14 or later, prefer Docker Sandboxes. Initialize its
+network policy as deny-by-default, use clone mode so the working copy stays in
+the microVM, scope the OpenAI secret to this sandbox, and allow exactly the API
+host:
+
+```bash
+brew trust docker/tap
+brew install docker/tap/sbx
+sbx login
+sbx policy init deny-all
+
+sbx create shell "$PWD" --clone --no-share-skills --name react-harness --cpus 1 --memory 1g
+sbx secret set react-harness openai
+sbx policy allow network --sandbox react-harness api.openai.com:443
+sbx policy ls --wide
+sbx run --name react-harness
+```
+
+Then, inside the sandbox:
+
+```bash
+OPENAI_API_KEY=proxy-managed bash ReAct.sh '<prompt>' >> ReAct.sh
+```
+
+Use a staging Git repository containing only files the agent may read; clone
+mode still exposes the source repository read-only. `--no-share-skills` also
+prevents the sandbox from receiving Docker's shared host skill store. Remove
+the microVM with `sbx rm react-harness` after exporting and reviewing the one
+result you intend to keep.
+
+This remains a research artifact. Canonicalization means a round completed; it
+does not make the resulting Bash trustworthy.

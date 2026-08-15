@@ -64,9 +64,12 @@ observe() {
 
 # CONTROL FLOW
 #
-# reason's model is configurable, with this default:
+# reason's model, Responses endpoint, and optional local relay socket are
+# configurable, with these defaults:
 #
 : "${OPENAI_MODEL:=gpt-5.6-sol}"
+: "${OPENAI_RESPONSES_URL:=https://api.openai.com/v1/responses}"
+: "${OPENAI_UNIX_SOCKET:=}"
 
 # reason is the continuation. Call reason only after every action and
 # observation needed for the current step has completed. Its output becomes
@@ -191,11 +194,24 @@ finish() {
 
 reason() {
     local system
+    local -a curl_args
 
     system="$(
         sed -n '/^# <SYSTEM>$/,/^# <\/SYSTEM>$/p' "$SELF" |
             sed '1d;$d;s/^# //;s/^#$//'
     )" || return
+
+    curl_args=(
+        -fsS
+        -H "Content-Type: application/json"
+        --data-binary @-
+    )
+    if [[ -n "$OPENAI_UNIX_SOCKET" ]]; then
+        curl_args+=(--unix-socket "$OPENAI_UNIX_SOCKET" --noproxy '*')
+    else
+        curl_args+=(-H "Authorization: Bearer $OPENAI_API_KEY")
+    fi
+    curl_args+=("$OPENAI_RESPONSES_URL")
 
     (
         set -o pipefail
@@ -209,10 +225,7 @@ reason() {
                 instructions: $instructions,
                 input: $input
             }' |
-        curl -fsS https://api.openai.com/v1/responses \
-            -H "Authorization: Bearer $OPENAI_API_KEY" \
-            -H "Content-Type: application/json" \
-            --data-binary @- |
+        curl "${curl_args[@]}" |
         jq -er '
             [
                 .output[]?
