@@ -4,6 +4,8 @@
   preserve the append-only execution semantics.
 - Keep `observe()` co-located with its TOOL MODEL contract inside `<SYSTEM>`;
   executable function source is itself part of the model's instructions.
+- Keep `ROOT`/`SELF`/`CANONICAL` in EXECUTION MODEL and the `OPENAI_MODEL`
+  default in CONTROL FLOW so runtime configuration stays beside its semantics.
 - `test.sh` is the only test harness. It must not call the real API; it injects
   `curl` and `jq` stubs through `PATH`.
 - Run syntax checks with `/bin/bash -n ReAct.sh` and `/bin/bash -n test.sh`.

@@ -17,6 +17,12 @@
 #   appended source  = future execution
 #   the whole script = your current context
 #
+# These bindings identify the current context and its durable canonical image:
+#
+ROOT="$(cd "$(dirname "$0")" && pwd -P)" || exit 1
+SELF="$ROOT/$(basename "$0")"
+CANONICAL="$ROOT/ReAct.sh"
+
 # Output ONLY valid Bash source. Never output Markdown fences. Any prose you
 # intentionally persist must be a Bash comment.
 #
@@ -58,6 +64,10 @@ observe() {
 
 # CONTROL FLOW
 #
+# reason's model is configurable, with this default:
+#
+: "${OPENAI_MODEL:=gpt-5.6-sol}"
+
 # reason is the continuation. Call reason only after every action and
 # observation needed for the current step has completed. Its output becomes
 # the next source appended to $SELF.
@@ -83,12 +93,6 @@ observe() {
 #
 # Everything, including reasoning itself, is part of the shell image.
 # </SYSTEM>
-
-ROOT="$(cd "$(dirname "$0")" && pwd -P)" || exit 1
-SELF="$ROOT/$(basename "$0")"
-CANONICAL="$ROOT/ReAct.sh"
-
-: "${OPENAI_MODEL:=gpt-5.6-sol}"
 
 # EDIT_CONTEXT CONTRACT
 #

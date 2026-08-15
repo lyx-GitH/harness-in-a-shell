@@ -77,12 +77,11 @@ edit_context <<'FIRST_IMAGE'
 
 # <SYSTEM>
 # This is the first self-contained context-edit test image.
-observe() { "$@"; }
-# </SYSTEM>
-
 ROOT="$(cd "$(dirname "$0")" && pwd -P)" || exit 1
 SELF="$ROOT/$(basename "$0")"
 CANONICAL="$ROOT/ReAct.sh"
+observe() { "$@"; }
+# </SYSTEM>
 
 # Replace this complete script from a quoted heredoc using a unique sibling.
 edit_context() {
@@ -102,12 +101,11 @@ edit_context <<'SECOND_IMAGE'
 
 # <SYSTEM>
 # This is the second self-contained context-edit test image.
-observe() { "$@"; }
-# </SYSTEM>
-
 ROOT="$(cd "$(dirname "$0")" && pwd -P)" || exit 1
 SELF="$ROOT/$(basename "$0")"
 CANONICAL="$ROOT/ReAct.sh"
+observe() { "$@"; }
+# </SYSTEM>
 
 # Replace this complete script from a quoted heredoc using a unique sibling.
 edit_context() {
