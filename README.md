@@ -34,10 +34,15 @@ before an experiment if you want an easy reset.
 4. The current Bash process continues into the appended source.
 5. Generated code may use tools, record observations, redefine tools, and call
    `reason` as its continuation.
-6. It may context-switch by creating a complete new image and using
-   `exec bash "$NEXT" >> "$NEXT"`.
+6. It may context-switch by passing a complete new image to `compact` as a
+   heredoc. Each switch gets a unique `.react.image.*` pathname, so repeated
+   compactions never truncate the image currently being executed.
 7. On completion it may consolidate reusable improvements back into the
    canonical `ReAct.sh` and exit.
+
+`compact` must be called directly with a quoted heredoc delimiter. Piping into
+it would put the function in a Bash subshell; leaving the delimiter unquoted
+would let the old image expand the new image's source prematurely.
 
 ## Test without an API key
 

@@ -68,22 +68,31 @@
 #
 #   - these governing semantics;
 #   - SELF, ROOT, CANONICAL, and runtime initialization;
-#   - observe and reason, or evolved replacements;
+#   - observe, compact, and reason, or evolved replacements;
 #   - API invocation machinery needed by reason;
 #   - useful evolved tools;
 #   - the current # INPUT task;
 #   - compressed task memory still needed;
 #   - a # <TAPE> boundary and a reason call that resumes execution.
 #
-# Then switch with:
+# Pass that complete source to compact as a heredoc:
 #
-#   NEXT="$ROOT/.react.next.sh"
-#   exec bash "$NEXT" >> "$NEXT"
+#   compact <<'NEXT_IMAGE'
+#   #!/usr/bin/env bash
+#   ...complete new image...
+#   NEXT_IMAGE
 #
-# exec replaces the current Bash process. Ordinary functions and non-exported
-# variables from the old image do not survive; reconstruct them in the new
-# image. Files, environment, working directory, and external processes remain
-# part of the surrounding operating-system state unless explicitly changed.
+# Call compact directly, never as part of a pipeline: a pipeline may run it in
+# a subshell, so exec would replace only that subshell. Quote the heredoc marker
+# so the old shell does not expand variables or substitutions in the new image.
+#
+# compact creates a uniquely named sibling image, writes stdin into it, and
+# replaces the current Bash process. It is safe to compact repeatedly: every
+# generation receives a fresh pathname rather than truncating its own $SELF.
+# Ordinary functions and non-exported variables from the old image do not
+# survive; reconstruct them in the new image. Files, environment, working
+# directory, and external processes remain part of the surrounding
+# operating-system state unless explicitly changed.
 #
 # FINALIZATION / SELF-EVOLUTION
 #
@@ -106,7 +115,7 @@
 # Bash comments       = observations / declarative state
 # appended Bash       = working memory + future execution
 # function redefine   = incremental tool evolution
-# rewrite + exec      = context switch / context compression
+# complete image + compact = context switch / context compression
 # final canonicalize  = durable self-evolution across tasks
 #
 # Everything, including reasoning itself, is part of the shell image.
@@ -127,6 +136,14 @@ observe() {
     sed 's/^/# OBS: /' "$__react_observe_output"
     rm -f "$__react_observe_output"
     printf '# EXIT: %d\n' "$__react_observe_status"
+}
+
+compact() {
+    local __react_next
+
+    __react_next="$(mktemp "$ROOT/.react.image.XXXXXX")" || return
+    cat > "$__react_next" || return
+    exec bash "$__react_next" >> "$__react_next"
 }
 
 reason() {
