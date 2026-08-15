@@ -78,9 +78,9 @@ observe() {
 #
 # This entire script is context. Function-adjacent comments describe the tools'
 # semantics and are part of that context, not external documentation. In
-# particular, the contract for changing this script lives beside edit_context.
-# Treat those comments as governing semantics and evolve them together with the
-# implementation they describe.
+# particular, the contracts for changing and finalizing this script live beside
+# edit_context and finish. Treat those comments as governing semantics and
+# evolve them together with the implementation they describe.
 #
 # CORE SEMANTICS
 #
@@ -89,7 +89,7 @@ observe() {
 # appended Bash       = working memory + future execution
 # function redefine   = incremental tool evolution
 # complete image + edit_context = context editing / context compression
-# final canonicalize  = durable self-evolution across tasks
+# complete image + finish = durable self-evolution across tasks
 #
 # Everything, including reasoning itself, is part of the shell image.
 # </SYSTEM>
@@ -112,11 +112,12 @@ observe() {
 #   ...complete replacement script...
 #   NEW_CONTEXT
 #
-# The replacement must reconstruct everything needed after the edit: governing
-# semantics and their function-adjacent comments; SELF, ROOT, and CANONICAL;
-# observe, edit_context, reason, and API machinery; useful evolved tools; the
-# current # INPUT; compressed task memory; a # <TAPE> boundary; and a reason
-# call that resumes execution.
+# Every replacement must reconstruct its governing semantics and adjacent
+# comments; SELF, ROOT, and CANONICAL; observe, edit_context, finish, reason,
+# API machinery, and useful evolved tools. A continuing task also preserves its
+# current # INPUT and required memory, then resumes through reason after a
+# # <TAPE> boundary. A terminal replacement instead builds a clean fresh-task
+# prefix through that boundary and invokes finish after it.
 #
 # Call edit_context directly, never in a pipeline: a pipeline may run it in a
 # subshell, so exec would replace only that subshell. Quote the heredoc marker
@@ -124,19 +125,45 @@ observe() {
 # Each edit receives a fresh sibling pathname, so repeated edits never truncate
 # the currently executing $SELF. exec preserves the process but ordinary
 # functions and non-exported variables do not survive; reconstruct them.
-#
-# When the task is complete, consolidate reusable improvements into a clean
-# fresh-task image and install it at $CANONICAL. Remove task-specific input,
-# observations, actions, temporary memory, and anything that would replay the
-# completed task. The canonical file must end cleanly at # <TAPE>. Then never
-# call reason again, emit no further stdout, perform no further actions, and
-# exit.
 edit_context() {
     local __react_next
 
     __react_next="$(mktemp "$ROOT/.react.image.XXXXXX")" || return
     cat > "$__react_next" || return
     exec bash "$__react_next" >> "$__react_next"
+}
+
+# FINISH CONTRACT
+#
+# finish makes the current script's reusable prefix canonical. Before calling
+# it, use edit_context when necessary to place every durable improvement to
+# semantics, function-adjacent comments, tools, and reason before the first
+# exact # <TAPE> line. Everything after that boundary is disposable trajectory.
+#
+# A typical terminal edit therefore ends like this:
+#
+#   ...clean reusable script...
+#   # <TAPE>
+#   finish
+#
+# Call finish directly with no arguments. It copies $SELF only through that
+# first boundary, stages the result beside $CANONICAL, verifies its Bash syntax,
+# makes it executable, atomically installs it as $ROOT/ReAct.sh, clears any EXIT
+# trap, and exits. The finish call itself and all task-specific input,
+# observations, actions, and temporary memory after # <TAPE> are automatically
+# discarded. On failure, the existing canonical image remains installed and
+# finish returns nonzero.
+finish() {
+    local __react_final
+
+    grep -q '^# <TAPE>$' "$SELF" || return
+    __react_final="$(mktemp "$ROOT/.react.final.XXXXXX")" || return
+    sed -n '1,/^# <TAPE>$/p' "$SELF" > "$__react_final" || return
+    bash -n "$__react_final" || return
+    chmod +x "$__react_final" || return
+    mv -f "$__react_final" "$CANONICAL" || return
+    trap - EXIT
+    builtin exit 0
 }
 
 reason() {

@@ -37,12 +37,16 @@ before an experiment if you want an easy reset.
 6. It may replace or compress its context by passing a complete new script to
    `edit_context` as a quoted heredoc. Each edit gets a unique `.react.image.*`
    pathname, so repeated edits never truncate the script currently executing.
-7. On completion it may consolidate reusable improvements back into the
-   canonical `ReAct.sh` and exit.
+7. On completion it calls `finish`, which keeps the current script only through
+   its first `# <TAPE>` boundary, installs that clean prefix as canonical
+   `ReAct.sh`, and exits.
 
 `edit_context` must be called directly with a quoted heredoc delimiter. Piping
 into it would put the function in a Bash subshell; leaving the delimiter
 unquoted would let the old image expand the new image's source prematurely.
+Before `finish`, the agent uses `edit_context` if needed to promote reusable
+improvements above `# <TAPE>`. The call itself and everything after the boundary
+are discarded automatically.
 
 ## Test without an API key
 
@@ -53,7 +57,8 @@ bash test.sh
 The test injects local `curl` and `jq` stubs. It verifies the unusual semantics
 that matter here: appended source executes once, a Bash function can evolve,
 state changed by an observed function remains live, observations join the tape,
-and `exec` switches to a self-contained image without changing PID.
+`exec` repeatedly switches to self-contained images without changing PID, and
+`finish` installs a clean canonical image without replaying the old trajectory.
 Set `BASH_UNDER_TEST` to exercise a specific interpreter, for example:
 
 ```bash

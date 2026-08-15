@@ -49,6 +49,57 @@ fi
 
 cat >/dev/null
 
+if [[ "${STUB_SCENARIO:-edit}" == "finish" ]]; then
+    cat <<'FINISH_STEP'
+edit_context <<'FINAL_ACTIVE_CONTEXT'
+#!/usr/bin/env bash
+
+# <SYSTEM>
+# CANONICAL_TEST: clean
+ROOT="$(cd "$(dirname "$0")" && pwd -P)" || exit 1
+SELF="$ROOT/$(basename "$0")"
+CANONICAL="$ROOT/ReAct.sh"
+observe() { "$@"; }
+# </SYSTEM>
+
+edit_context() {
+    local __react_next
+
+    __react_next="$(mktemp "$ROOT/.react.image.XXXXXX")" || return
+    cat > "$__react_next" || return
+    exec bash "$__react_next" >> "$__react_next"
+}
+
+finish() {
+    local __react_final
+
+    grep -q '^# <TAPE>$' "$SELF" || return
+    __react_final="$(mktemp "$ROOT/.react.final.XXXXXX")" || return
+    sed -n '1,/^# <TAPE>$/p' "$SELF" > "$__react_final" || return
+    bash -n "$__react_final" || return
+    chmod +x "$__react_final" || return
+    mv -f "$__react_final" "$CANONICAL" || return
+    trap - EXIT
+    builtin exit 0
+}
+
+reason() { :; }
+
+if (($#)); then
+    printf '%s\n' "$1" | sed 's/^/# INPUT: /'
+fi
+
+reason
+
+# <TAPE>
+trap 'printf "# EXIT_TRAP_RAN\n"' EXIT
+finish
+printf '# AFTER_FINISH: reached\n'
+FINAL_ACTIVE_CONTEXT
+FINISH_STEP
+    exit
+fi
+
 step=0
 if [[ -f "$STUB_STATE" ]]; then
     read -r step < "$STUB_STATE"
@@ -208,4 +259,50 @@ second_self="$(sed -n 's/^# SECOND_SWITCH_SELF: //p' "$SECOND_IMAGE")"
 [[ "$second_self" == "$SECOND_IMAGE" ]] ||
     fail "second image saw SELF as $second_self, expected $SECOND_IMAGE"
 
-printf 'ok: append execution, function evolution, observations, and repeated context editing\n'
+FINISH_ROOT="$TMP_ROOT/finish-case"
+RUNNING_IMAGE="$FINISH_ROOT/running-image.sh"
+mkdir "$FINISH_ROOT"
+cp "$PROJECT_ROOT/ReAct.sh" "$FINISH_ROOT/ReAct.sh"
+ln "$FINISH_ROOT/ReAct.sh" "$RUNNING_IMAGE"
+
+PATH="$TMP_ROOT/bin:$BASH_DIR:/usr/bin:/bin" \
+OPENAI_API_KEY=stub \
+STUB_SCENARIO=finish \
+    "$BASH_UNDER_TEST" "$FINISH_ROOT/ReAct.sh" "exercise finish semantics" \
+    >> "$FINISH_ROOT/ReAct.sh"
+
+"$BASH_UNDER_TEST" -n "$RUNNING_IMAGE"
+"$BASH_UNDER_TEST" -n "$FINISH_ROOT/ReAct.sh"
+[[ -x "$FINISH_ROOT/ReAct.sh" ]] || fail "canonical image is not executable"
+cmp -s "$RUNNING_IMAGE" "$FINISH_ROOT/ReAct.sh" &&
+    fail "finish did not replace the canonical image"
+
+assert_count 1 '^# INPUT: exercise finish semantics$' "$RUNNING_IMAGE"
+assert_count 1 "^edit_context <<'FINAL_ACTIVE_CONTEXT'$" "$RUNNING_IMAGE"
+
+finish_image_count="$(find "$FINISH_ROOT" -maxdepth 1 -type f -name '.react.image.*' | wc -l | tr -d ' ')"
+[[ "$finish_image_count" == 1 ]] ||
+    fail "expected one final active context; got $finish_image_count"
+FINAL_ACTIVE_IMAGE="$(find "$FINISH_ROOT" -maxdepth 1 -type f -name '.react.image.*')"
+"$BASH_UNDER_TEST" -n "$FINAL_ACTIVE_IMAGE"
+assert_count 1 '^finish$' "$FINAL_ACTIVE_IMAGE"
+assert_count 0 '^# EXIT_TRAP_RAN$' "$FINAL_ACTIVE_IMAGE"
+assert_count 0 '^# AFTER_FINISH: reached$' "$FINAL_ACTIVE_IMAGE"
+
+assert_count 1 '^# CANONICAL_TEST: clean$' "$FINISH_ROOT/ReAct.sh"
+assert_count 0 '^# INPUT:' "$FINISH_ROOT/ReAct.sh"
+assert_count 0 '^# OBS:' "$FINISH_ROOT/ReAct.sh"
+assert_count 1 '^# <TAPE>$' "$FINISH_ROOT/ReAct.sh"
+[[ "$(tail -n 1 "$FINISH_ROOT/ReAct.sh")" == '# <TAPE>' ]] ||
+    fail "canonical image does not end at its tape boundary"
+
+EXPECTED_CANONICAL="$FINISH_ROOT/expected-canonical.sh"
+sed -n '1,/^# <TAPE>$/p' "$FINAL_ACTIVE_IMAGE" > "$EXPECTED_CANONICAL"
+cmp -s "$EXPECTED_CANONICAL" "$FINISH_ROOT/ReAct.sh" ||
+    fail "canonical ReAct.sh is not the reusable prefix of the final active context"
+
+final_staging_count="$(find "$FINISH_ROOT" -maxdepth 1 -name '.react.final.*' | wc -l | tr -d ' ')"
+[[ "$final_staging_count" == 0 ]] ||
+    fail "finish left $final_staging_count staging files after installation"
+
+printf 'ok: append execution, tool evolution, repeated context editing, and finish\n'
