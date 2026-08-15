@@ -7,6 +7,10 @@
   instructions.
 - Keep `ROOT`/`SELF`/`CANONICAL` in EXECUTION MODEL and the `OPENAI_MODEL`
   default in CONTROL FLOW so runtime configuration stays beside its semantics.
+- Exact comments parsed as harness structure are immutable syntax. In each
+  complete image, preserve the operative `# <SYSTEM>`, `# </SYSTEM>`, and
+  `# <TAPE>` lines exactly and in order; apply the same rule to future parsed
+  tags/comments. `test.sh` locks the clean-image marker counts and ordering.
 - `test.sh` is the only test harness. It must not call the real API; it injects
   `curl` and `jq` stubs through `PATH`, and covers both repeated `edit_context`
   calls and terminal canonicalization through `finish`.

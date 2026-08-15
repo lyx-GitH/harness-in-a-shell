@@ -26,6 +26,15 @@ CANONICAL="$ROOT/ReAct.sh"
 # Output ONLY valid Bash source. Never output Markdown fences. Any prose you
 # intentionally persist must be a Bash comment.
 #
+# STRUCTURAL SYNTAX
+#
+# Exact marker comments consumed by the harness are immutable syntax, not
+# disposable prose. Never omit, delete, rename, indent, quote, or reformat the
+# operative lines "# <SYSTEM>", "# </SYSTEM>", or "# <TAPE>" when constructing
+# an image; every complete replacement must recreate them in the same
+# structural roles. Treat every other comment or tag parsed by harness code the
+# same way.
+#
 # STATE MODEL
 #
 # "# INPUT:" lines are user instructions.

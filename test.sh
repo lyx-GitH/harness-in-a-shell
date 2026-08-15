@@ -29,6 +29,21 @@ assert_count() {
         fail "expected $expected matches for '$pattern' in $file; got $actual"
 }
 
+assert_structural_image() {
+    local file="$1"
+    local system_open system_close tape
+
+    assert_count 1 '^# <SYSTEM>$' "$file"
+    assert_count 1 '^# </SYSTEM>$' "$file"
+    assert_count 1 '^# <TAPE>$' "$file"
+
+    system_open="$(grep -n '^# <SYSTEM>$' "$file" | cut -d: -f1)"
+    system_close="$(grep -n '^# </SYSTEM>$' "$file" | cut -d: -f1)"
+    tape="$(grep -n '^# <TAPE>$' "$file" | cut -d: -f1)"
+    ((system_open < system_close && system_close < tape)) ||
+        fail "structural markers are out of order in $file"
+}
+
 mkdir "$TMP_ROOT/bin"
 cp "$PROJECT_ROOT/ReAct.sh" "$TMP_ROOT/ReAct.sh"
 
@@ -216,6 +231,7 @@ JQ_STUB
 chmod +x "$TMP_ROOT/bin/curl" "$TMP_ROOT/bin/jq"
 
 "$BASH_UNDER_TEST" -n "$TMP_ROOT/ReAct.sh"
+assert_structural_image "$TMP_ROOT/ReAct.sh"
 
 PATH="$TMP_ROOT/bin:$BASH_DIR:/usr/bin:/bin" \
 OPENAI_API_KEY=stub \
@@ -320,6 +336,7 @@ assert_count 1 '^# CANONICAL_TEST: clean$' "$FINISH_ROOT/ReAct.sh"
 assert_count 0 '^# INPUT:' "$FINISH_ROOT/ReAct.sh"
 assert_count 0 '^# OBS:' "$FINISH_ROOT/ReAct.sh"
 assert_count 1 '^# <TAPE>$' "$FINISH_ROOT/ReAct.sh"
+assert_structural_image "$FINISH_ROOT/ReAct.sh"
 [[ "$(tail -n 1 "$FINISH_ROOT/ReAct.sh")" == '# <TAPE>' ]] ||
     fail "canonical image does not end at its tape boundary"
 
