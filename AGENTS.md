@@ -44,9 +44,11 @@
   streams or render agent-controlled logs automatically on the host.
 - `.env` and `.env.*` must remain excluded from Git and Docker build contexts.
   A live key is passed only to the trusted relay container, never to the agent.
-- Cost-conscious sandbox defaults are 8 upstream attempts and 4096 output
-  tokens per attempt. The relay's trusted `/tmp/openai-request-count` is copied
-  into each non-test run directory for audit without trusting agent output.
+- The sandbox defaults to 8 upstream attempts and no explicit
+  `max_output_tokens`; the selected model's intrinsic maximum applies. Set
+  `OPENAI_MAX_OUTPUT_TOKENS` explicitly for a smaller cost/output bound. The
+  relay's trusted request count and configured output limit are copied into
+  each non-test run directory without trusting agent output.
 - For a self-contained run whose only project payload is the harness, use
   `sandbox/Dockerfile.agent-react-only` with a distinct
   `SANDBOX_AGENT_IMAGE`; it copies only `ReAct.sh` into `/seed`. Runtime tools,
@@ -90,6 +92,18 @@
   result, the container falsely exited 0 without `finish`. Prompt-level
   encouragement to use the harness was insufficient; preserve the trace under
   `experiments/` and address incomplete-response admission before retrying.
+- The 2026-08-16 follow-up tasklog trial omitted request-level
+  `max_output_tokens`, used Sol `xhigh`, and completed through `finish` after 50
+  of 64 admitted requests. The live tape grew from 9,666 to an observed 248,681
+  bytes, then the final canonical `ReAct.sh` became byte-identical to the seed;
+  the harness stayed structurally valid and passed `test.sh`. No
+  `edit_context` occurred, so this validates round completion and trajectory
+  cleanup, not durable harness evolution. Repeated/non-tail continuations
+  produced a sizable execution backlog and duplicate final verification.
+- A successful `finish` removes the live tape needed for behavioral analysis.
+  For future research trials, use a trusted pre-finish/checkpoint snapshot if
+  the exact action/request trajectory matters; the final worktree alone proves
+  the canonical outcome but cannot reconstruct the discarded round.
 - This host's legacy macOS 12.5.1 / Docker Desktop 4.9.1 stack is acceptable only
   for stub/verification convenience, not as the sole boundary for live arbitrary
   Bash. Use a no-sharing disposable UTM Linux VM now, or Docker Sandboxes clone

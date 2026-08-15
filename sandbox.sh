@@ -16,7 +16,8 @@ RELAY_IMAGE=harness-in-a-shell-relay:local
 : "${SANDBOX_MEMORY:=512m}"
 : "${SANDBOX_WORK_SIZE:=256m}"
 : "${OPENAI_MAX_REQUESTS:=8}"
-: "${OPENAI_MAX_OUTPUT_TOKENS:=4096}"
+: "${OPENAI_MAX_OUTPUT_TOKENS:=}"
+: "${OPENAI_UPSTREAM_TIMEOUT_SECONDS:=180}"
 : "${OPENAI_CHECKPOINT_AFTER_REQUESTS:=}"
 
 build_args=()
@@ -86,7 +87,11 @@ normalize_positive_int() {
 
 normalize_positive_int SANDBOX_TIMEOUT_SECONDS "$SANDBOX_TIMEOUT_SECONDS"
 normalize_positive_int OPENAI_MAX_REQUESTS "$OPENAI_MAX_REQUESTS"
-normalize_positive_int OPENAI_MAX_OUTPUT_TOKENS "$OPENAI_MAX_OUTPUT_TOKENS"
+normalize_positive_int \
+    OPENAI_UPSTREAM_TIMEOUT_SECONDS "$OPENAI_UPSTREAM_TIMEOUT_SECONDS"
+if [[ -n "$OPENAI_MAX_OUTPUT_TOKENS" ]]; then
+    normalize_positive_int OPENAI_MAX_OUTPUT_TOKENS "$OPENAI_MAX_OUTPUT_TOKENS"
+fi
 if [[ -n "$OPENAI_CHECKPOINT_AFTER_REQUESTS" ]]; then
     normalize_positive_int \
         OPENAI_CHECKPOINT_AFTER_REQUESTS "$OPENAI_CHECKPOINT_AFTER_REQUESTS"
@@ -224,6 +229,7 @@ if [[ "$MODE" != test ]]; then
         -e OPENAI_PAUSE_AFTER_REQUESTS="$OPENAI_CHECKPOINT_AFTER_REQUESTS" \
         -e OPENAI_MAX_REQUESTS="$OPENAI_MAX_REQUESTS" \
         -e OPENAI_MAX_OUTPUT_TOKENS="$OPENAI_MAX_OUTPUT_TOKENS" \
+        -e OPENAI_UPSTREAM_TIMEOUT_SECONDS="$OPENAI_UPSTREAM_TIMEOUT_SECONDS" \
         "$RELAY_IMAGE" >/dev/null
     CREATED_RELAY=1
     docker start "$RELAY_CONTAINER" >/dev/null
@@ -398,6 +404,10 @@ if [[ -n "$relay_request_count" ]]; then
 fi
 printf '%s\n' "$OPENAI_MODEL" > "$RUN_DIR/model"
 printf '%s\n' "${OPENAI_REASONING_EFFORT:-default}" > "$RUN_DIR/reasoning-effort"
+printf '%s\n' "${OPENAI_MAX_OUTPUT_TOKENS:-model-default}" \
+    > "$RUN_DIR/max-output-tokens"
+printf '%s\n' "$OPENAI_UPSTREAM_TIMEOUT_SECONDS" \
+    > "$RUN_DIR/upstream-timeout-seconds"
 printf '%s\n' "$SANDBOX_AGENT_IMAGE" > "$RUN_DIR/agent-image"
 printf '%s\n' "$SANDBOX_AGENT_DOCKERFILE" > "$RUN_DIR/agent-dockerfile"
 if [[ -n "$OPENAI_CHECKPOINT_AFTER_REQUESTS" ]]; then
@@ -423,6 +433,8 @@ if [[ "$MODE" == run ]]; then
         "$relay_request_count" "$OPENAI_MAX_REQUESTS"
     printf 'sandbox: model %s; reasoning effort %s\n' \
         "$OPENAI_MODEL" "${OPENAI_REASONING_EFFORT:-default}"
+    printf 'sandbox: output-token limit %s\n' \
+        "${OPENAI_MAX_OUTPUT_TOKENS:-model default}"
     if [[ -n "$OPENAI_CHECKPOINT_AFTER_REQUESTS" ]]; then
         checkpoint_summary="not reached"
         if [[ -n "$checkpoint_captured" ]]; then

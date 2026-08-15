@@ -8,6 +8,7 @@ import socketserver
 import ssl
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Optional
 
 
 UPSTREAM_HOST = "api.openai.com"
@@ -26,6 +27,16 @@ def positive_int(name: str, default: int) -> int:
     value = int(os.environ.get(name, str(default)))
     if value <= 0:
         raise ValueError(f"{name} must be positive")
+    return value
+
+
+def optional_positive_int(name: str) -> Optional[int]:
+    raw_value = os.environ.get(name, "")
+    if not raw_value:
+        return None
+    value = int(raw_value)
+    if value <= 0:
+        raise ValueError(f"{name} must be positive when set")
     return value
 
 
@@ -50,7 +61,7 @@ if PAUSE_AFTER_REQUESTS < 0 or PAUSE_AFTER_REQUESTS >= MAX_REQUESTS:
         "OPENAI_PAUSE_AFTER_REQUESTS must be zero or less than OPENAI_MAX_REQUESTS"
     )
 MAX_BODY_BYTES = positive_int("OPENAI_MAX_BODY_BYTES", 512 * 1024)
-MAX_OUTPUT_TOKENS = positive_int("OPENAI_MAX_OUTPUT_TOKENS", 4 * 1024)
+MAX_OUTPUT_TOKENS = optional_positive_int("OPENAI_MAX_OUTPUT_TOKENS")
 MAX_RESPONSE_BYTES = positive_int("OPENAI_MAX_RESPONSE_BYTES", 32 * 1024 * 1024)
 UPSTREAM_TIMEOUT_SECONDS = positive_int("OPENAI_UPSTREAM_TIMEOUT_SECONDS", 180)
 CLIENT_TIMEOUT_SECONDS = positive_int("OPENAI_CLIENT_TIMEOUT_SECONDS", 10)
@@ -209,10 +220,11 @@ class RelayHandler(BaseHTTPRequestHandler):
             "model": request["model"],
             "instructions": request["instructions"],
             "input": request["input"],
-            "max_output_tokens": MAX_OUTPUT_TOKENS,
             "store": False,
             "stream": False,
         }
+        if MAX_OUTPUT_TOKENS is not None:
+            upstream_request["max_output_tokens"] = MAX_OUTPUT_TOKENS
         if REASONING_EFFORT:
             upstream_request["reasoning"] = {"effort": REASONING_EFFORT}
         upstream_body = json.dumps(upstream_request, separators=(",", ":")).encode(

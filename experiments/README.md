@@ -58,3 +58,19 @@ tests in one 10000-token response. The response ended inside a test heredoc;
 Bash treated EOF as its terminator and the run falsely exited 0 without tests,
 documentation, or `finish`. An independent isolated smoke test also found a
 functional `list` bug. Nothing was adopted.
+
+## Offline tasklog finish trial without an explicit output cap
+
+`2026-08-16-sol-xhigh-tasklog-model-default-finish/` preserves the follow-up
+real-task run from the same pristine ReAct-only seed. The trusted relay omitted
+`max_output_tokens`, retained a 64-request safety bound, and admitted 50 Sol
+`xhigh` requests before the agent finished successfully.
+
+The active tape grew from 9,666 to an observed 248,681 bytes and accumulated a
+continuation backlog, then `finish` reduced the canonical image to a file
+byte-identical to the seed. This proves the round lifecycle and canonical
+cleanup on a substantive task. It does not show durable self-improvement: the
+agent never used `edit_context`, and no temporary tool or harness change
+survived the TAPE boundary. The full final worktree is retained as a
+quarantined binary artifact; because `finish` discards the tape, the exact live
+trajectory is not recoverable from the final archive.

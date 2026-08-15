@@ -159,14 +159,17 @@ bash sandbox.sh run 'Inspect the harness and finish cleanly.'
 ```
 
 Tune the bounds with `SANDBOX_TIMEOUT_SECONDS`, `SANDBOX_MEMORY`,
-`SANDBOX_WORK_SIZE`, `OPENAI_MAX_REQUESTS`, and
-`OPENAI_MAX_OUTPUT_TOKENS`. For controlled model experiments,
+`SANDBOX_WORK_SIZE`, `OPENAI_MAX_REQUESTS`, `OPENAI_MAX_OUTPUT_TOKENS`, and
+`OPENAI_UPSTREAM_TIMEOUT_SECONDS`. For controlled model experiments,
 `OPENAI_REASONING_EFFORT` can be `none`, `low`, `medium`, `high`, `xhigh`, or
 `max`; when unset, the model default is preserved. This setting is injected by
 the trusted relay and is not exposed to the agent. The cost-conscious defaults
-allow at most 8 API attempts and 4096 output tokens per attempt; the trusted
-relay records the actual attempt count, model, and reasoning effort in each run
-directory. Container output is disk-capped and retained under
+allow at most 8 API attempts. `OPENAI_MAX_OUTPUT_TOKENS` is optional; when it is
+unset, the relay omits `max_output_tokens` and the selected model's intrinsic
+maximum applies. Set it explicitly when a smaller cost/output bound is desired.
+The trusted relay records the actual attempt count, model, reasoning effort,
+and configured output limit in each run directory. Container output is
+disk-capped and retained under
 `sandbox-runs/run.*/untrusted-{output,stderr}.bin`; the trusted host runner
 deliberately does not parse it or render agent-controlled logs in the terminal.
 A normal run writes a gzip tar stream to `untrusted-output.bin`, but arbitrary
