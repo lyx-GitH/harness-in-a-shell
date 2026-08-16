@@ -233,3 +233,33 @@ repository 以只读形式暴露给 VM。`--no-share-skills` 还会避免 sandbo
 
 这仍然是研究原型。Canonicalization 只说明一轮已经结束，并不说明生成的 Bash 值得
 信任。
+
+## 实验结果与分析
+
+[`experiments/`](./experiments/) 中归档的运行用于检验这个 harness 能否支持增量工作、
+安全发布和持久自我改进。模型生成的 candidate 都是隔离保存的研究产物；下列实验版本
+均未被合入正式 harness。
+
+| 实验 | 请求数 / 上限 | 观察结果 | 解释 |
+| --- | ---: | --- | --- |
+| [Terra `xhigh` 受控对比](./experiments/2026-08-15-terra-xhigh/) | 8 / 8 | 调用了 `finish`，但发布的 candidate 删除了下一任务的 bootstrap，并且未通过语义测试。 | 从审计更快进入实现，并不等于能够安全 canonicalize。 |
+| [Sol `xhigh` 同条件对比](./experiments/2026-08-15-sol-xhigh-8-request-cutoff/) | 8 / 8 | 识别出更多仓库级不变量并切换到 continuing image，但在重新测试和 `finish` 前耗尽请求；image 中还保留了 207 行原始 observation。 | 在这个 cutoff 下比 Terra 更谨慎，但没有完成或证明改进。 |
+| [Sol 仅含 ReAct 的轨迹](./experiments/2026-08-15-sol-xhigh-react-only-16-request-10k/) | 16 / 16 | 在 live tape 中改进了 observation framing、image validation、`edit_context`/`finish` 和 child Bash 启动；始终没有切换 context 或调用 `finish`。 | 出现了有价值的增量设计，但全部改动仍是可丢弃轨迹，没有成为持久源码。 |
+| [带 10k 输出上限的 tasklog 实验](./experiments/2026-08-15-sol-xhigh-tasklog-64-cap-10k-truncated/) | 2 / 64 | 第二个响应在测试 heredoc 内截断；Bash 把 EOF 当作终止符，container 在测试、文档和 `finish` 均未完成时仍以 0 退出；隔离检查还发现了 `list` bug。 | Responses 可能不完整时，进程成功和 `bash -n` 都不足以证明任务完成。 |
+| [采用模型默认输出上限的 tasklog finish 实验](./experiments/2026-08-16-sol-xhigh-tasklog-model-default-finish/) | 50 / 64 | 成功执行到 `finish`；active file 从 9,666 字节增长到观测到的 248,681 字节，随后 canonical `ReAct.sh` 与 seed 逐字节相同；全程没有 `edit_context`。 | 有力验证了长 round 执行和轨迹清理，但没有产生持久 harness 演化。 |
+
+主要结论：
+
+- API 请求上限不等于干净的 ReAct round 上限。一次模型输出可能包含重复或非尾部的
+  `reason` 调用，形成执行 backlog，使请求数与有意义的 action round 数量分离。
+- Shell 以 0 退出不代表响应完整。特别是 heredoc 内的输出截断仍可能被 Bash 接受；
+  后续 admission logic 应在文本成为可执行源码前拒绝 incomplete Responses。
+- `finish` 只证明 file-as-round 生命周期到达 canonical cleanup，不证明结果正确或发生了
+  自我改进。持久演化需要显式调用 `edit_context`，把选中的改动移动到 `# <TAPE>` 之前。
+- 成功的 `finish` 会丢弃 live tape。若行为研究需要保留精确轨迹，必须在 finish 前或 API
+  boundary 建立受信 checkpoint。
+- 在受控的 8-request cutoff 下，Sol 的发布行为比 Terra 更保守，但两者都没有产出可采用
+  的结果。这些证据支持“行为存在差异”，不足以得出一般性的模型排名。
+
+完整 provenance、控制变量和每份 artifact 的限制见
+[`experiments/README.md`](./experiments/README.md)。

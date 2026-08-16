@@ -257,3 +257,39 @@ result you intend to keep.
 
 This remains a research artifact. Canonicalization means a round completed; it
 does not make the resulting Bash trustworthy.
+
+## Experiment results and analysis
+
+The archived runs under [`experiments/`](./experiments/) test whether the
+harness can support incremental work, safe publication, and durable
+self-improvement. Model-produced candidates are quarantined research artifacts;
+none of the experimental harness variants below was adopted.
+
+| Experiment | Requests / limit | Observed result | Interpretation |
+| --- | ---: | --- | --- |
+| [Terra `xhigh`, controlled comparison](./experiments/2026-08-15-terra-xhigh/) | 8 / 8 | Called `finish`, but published a candidate that removed the next-task bootstrap and failed the semantic test. | Faster movement from audit to implementation did not produce safe canonicalization. |
+| [Sol `xhigh`, same controlled comparison](./experiments/2026-08-15-sol-xhigh-8-request-cutoff/) | 8 / 8 | Detected more repository-level invariants and switched to a continuing image, but reached the cap before retesting or finishing; the image retained 207 raw observation lines. | More cautious publication behavior than Terra at this cutoff, but no completed or proven improvement. |
+| [Sol ReAct-only trace](./experiments/2026-08-15-sol-xhigh-react-only-16-request-10k/) | 16 / 16 | Improved observation framing, image validation, `edit_context`/`finish`, and child-Bash startup in the live tape. It never switched context or called `finish`. | Useful incremental design work occurred, but every change remained disposable trajectory rather than durable source. |
+| [Tasklog trial with 10k output cap](./experiments/2026-08-15-sol-xhigh-tasklog-64-cap-10k-truncated/) | 2 / 64 | The second response ended inside a test heredoc. Bash accepted EOF as the terminator and the container exited 0 without completing tests, docs, or `finish`; an isolated check also found a `list` bug. | Process success and `bash -n` are insufficient evidence when a Responses result may be incomplete. |
+| [Tasklog finish trial with model-default output limit](./experiments/2026-08-16-sol-xhigh-tasklog-model-default-finish/) | 50 / 64 | Completed through `finish`. The active file grew from 9,666 to an observed 248,681 bytes, then canonical `ReAct.sh` became byte-identical to the seed; no `edit_context` occurred. | Strong evidence for long-round execution and trajectory cleanup, but no durable harness evolution. |
+
+The main conclusions are:
+
+- An API-request limit is not a clean ReAct-round limit. A single model output
+  can contain duplicated or non-tail `reason` calls, creating an execution
+  backlog and making request count diverge from meaningful action rounds.
+- A zero shell exit code does not prove completion. In particular, an output
+  cutoff inside a heredoc can still be accepted by Bash. Future admission logic
+  should reject incomplete Responses before their text becomes executable.
+- `finish` proves that the file-as-round lifecycle reached canonical cleanup;
+  it does not prove correctness or self-improvement. Durable evolution requires
+  an explicit `edit_context` that moves selected changes above `# <TAPE>`.
+- Successful `finish` discards the live tape. Behavioral studies therefore need
+  a trusted pre-finish or API-boundary checkpoint if the exact trajectory must
+  remain available for analysis.
+- Under the controlled eight-request cutoff, Sol was more conservative about
+  publication than Terra, but neither model produced an adoptable result. The
+  evidence supports a behavioral difference, not a general model ranking.
+
+See [`experiments/README.md`](./experiments/README.md) for the full provenance,
+controls, and artifact-specific caveats.
