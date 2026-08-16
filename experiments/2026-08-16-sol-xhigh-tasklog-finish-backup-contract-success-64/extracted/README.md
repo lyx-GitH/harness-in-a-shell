@@ -23,4 +23,23 @@ made non-executable and read-only before being added to the dataset.
 | `rounds/react.round.dFmdnp.sh` | `ea522790c3c38f54a72d3d91752f4520ab2e02994ec9b8cf0e1ce58ade655c1a` |
 | `deliverables/tasklog.sh` | `a2344026ec90924a473c9d3b9aa9b9f600c2b369acc47adce353152f5b5ac04c` |
 | `deliverables/test_tasklog.sh` | `73b1cf784d3a3fd0cf89e8bdab54ee2edf95bcf428a145ee33aaf93a33bbc217` |
-| `deliverables/README.tasklog.md` | `64152ed6a6e5f9f9a4008d941432aa7dfab6dd64705bfa28bf3ce210c6df016b` |
+| `deliverables/README.tasklog.md` | `61b237a6fe10d5dbbf738acf1f396c3ee06e86047f051f426842db33bc35fc13` |
+
+---
+
+# 已提取 E2E 文件清单（中文）
+
+这些模型生成文件通过一次性无网络容器选择性复制。它们是研究数据，并非已经采用的
+源码；加入数据集前已设为不可执行、只读文件。
+
+## 执行顺序与交付物
+
+1. `rounds/react.round.dFmdnp.sh`：terminal context switch 之前完整的 64-request
+   trajectory-bearing round。
+2. `images/react.image.FEAytq.sh`：clean terminal image，在 TAPE 之前包含持久化的
+   bootstrap 改进，并在 TAPE 后调用 `finish`。
+3. `ReAct.sh`：由 `finish` 安装的 canonical prefix。
+4. `deliverables/tasklog.sh`、`deliverables/test_tasklog.sh` 和
+   `deliverables/README.tasklog.md`：完成的 task 产品。
+
+SHA-256 见上方共享表格；`README.tasklog.md` 双语化后，其哈希会在本表中同步更新。

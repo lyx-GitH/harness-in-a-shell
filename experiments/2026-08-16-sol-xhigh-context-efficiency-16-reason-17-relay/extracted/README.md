@@ -27,3 +27,23 @@ executed directly.
 | `images/react.image.aewujB.sh` | `7fd5772786e9a1d04474a6ce275cac7bc9839277ce33a09c3ed0fc50e22f9e23` |
 | `images/react.image.Gu5NUr.sh` | `27a7cf20c41fccc0ecc36dbc964799599026a8326aa5ac76373c95b16d4029f5` |
 | `rounds/react.round.bP4KUe.sh` | `f158d06a088be99459cc827def7c57668482ee78adcd0634d6235c89a6d834fe` |
+
+---
+
+# 已提取 image 清单（中文）
+
+这些文件通过一次性无网络容器从原始实验数据中选择性复制。它们是模型生成的研究
+数据，并非已经采用的源码；加入数据集前已设为不可执行、只读文件。
+
+## 执行顺序
+
+1. `rounds/react.round.bP4KUe.sh`：第一次切换前归档的、带 trajectory 的初始
+   canonical image。
+2. `images/react.image.70HEyl.sh`：第一次结构重写后的 active context，包含第 3、4
+   次 reasoning call。
+3. `images/react.image.aewujB.sh`：完成修正和验证的高效 context；第 5 次 reasoning
+   call 最后调用 `finalize`。
+4. `images/react.image.Gu5NUr.sh`：clean terminal image，末尾直接调用 `finish`。
+5. `ReAct.sh`：`finish` 截取首个 TAPE 边界及其之前内容后安装的最终 canonical。
+
+SHA-256 见上方共享表格。
