@@ -1,6 +1,9 @@
 .react.image.*
 .react.final.*
 .react.round.*
+.act.image.*
+.act.final.*
+.act.round.*
 .env
 .env.*
 sandbox-runs/

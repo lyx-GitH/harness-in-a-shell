@@ -11,6 +11,20 @@ That one shell command is the ReAct loop. In generic form it is
 appended to the running script, and the same Bash process continues reading and
 executing the appended source. There is no explicit `while` loop.
 
+The repository also includes a split Python-SDK variant:
+
+```bash
+python3 -m pip install openai
+export OPENAI_API_KEY='...'
+bash act.sh '<prompt>' >> act.sh
+```
+
+`act.sh` retains the append-only agent, tools, context editing, and round
+lifecycle. `reason.py` extracts the SYSTEM section, calls the Responses API,
+and prints the next Bash source. Its `MODEL` constant is intentionally ordinary
+agent-modifiable source, so model or API evolution happens by editing the Python
+tool itself instead of adding shell configuration.
+
 This repository is a research prototype built around three ideas.
 
 ## 1. Script as Context
@@ -87,7 +101,7 @@ before the real boundary must not contain another identical whole line.
 
 ## Run
 
-Requirements:
+Requirements for the self-contained `ReAct.sh` variant:
 
 - Bash
 - `curl`
@@ -101,10 +115,18 @@ export OPENAI_API_KEY='...'
 bash ReAct.sh 'Find and fix the failing tests.' >> ReAct.sh
 ```
 
-The command intentionally modifies `ReAct.sh`, and the canonical pathname may
-temporarily disappear after the first context switch. This prototype assumes
-one active round per directory. Git provides the simplest experiment log and
-reset point.
+For the split variant, use Bash, Python 3, the `openai` package, and
+`OPENAI_API_KEY`. Its canonical image is `act.sh`, and `reason.py` must remain
+beside it:
+
+```bash
+bash act.sh 'Find and fix the failing tests.' >> act.sh
+```
+
+Each command intentionally modifies its canonical shell image (`ReAct.sh` or
+`act.sh`), and that canonical pathname may temporarily disappear after the
+first context switch. This prototype assumes one active round per directory.
+Git provides the simplest experiment log and reset point.
 
 ## Test without an API key
 
@@ -112,8 +134,9 @@ reset point.
 bash test.sh
 ```
 
-The test injects local `curl` and `jq` stubs. It verifies append execution,
-function evolution and shell-state persistence, repeated context edits,
+The test injects local `curl`, `jq`, Python, and OpenAI SDK stubs; it never calls
+the real API. It verifies both reasoner variants, append execution, function
+evolution and shell-state persistence, repeated context edits,
 de-canonicalization after the first switch, PID continuity across `exec`, and
 automatic canonicalization through `finish` on Bash 3.2 and Bash 5.1.
 

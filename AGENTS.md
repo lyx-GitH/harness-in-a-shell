@@ -2,6 +2,11 @@
 
 - `ReAct.sh` is the entire agent runtime and canonical image. Keep it small and
   preserve the append-only execution semantics.
+- `act.sh` is the split-runtime variant: it preserves the same append-only,
+  context-editing, and finish semantics under `.act.*` paths, while `reason.py`
+  uses the official OpenAI Python SDK. `MODEL` intentionally lives directly in
+  `reason.py`; that file is ordinary agent-modifiable source rather than shell
+  environment configuration.
 - Keep `observe()` co-located with its FUNCTION AS TOOL contract inside
   `<SYSTEM>`; executable function source is itself part of the model's
   instructions.
@@ -12,9 +17,10 @@
   `# <TAPE>` lines exactly and in order; apply the same rule to future parsed
   tags/comments. `test.sh` locks the clean-image marker counts and ordering.
 - `test.sh` is the only test harness. It must not call the real API; it injects
-  `curl` and `jq` stubs through `PATH`, and covers both repeated `edit_context`
-  calls and terminal canonicalization through `finish`.
-- Run syntax checks with `/bin/bash -n ReAct.sh` and `/bin/bash -n test.sh`.
+  `curl`/`jq` stubs and local Python/OpenAI SDK stubs, and covers both repeated
+  `edit_context` calls and terminal canonicalization through `finish`.
+- Run syntax checks with `/bin/bash -n ReAct.sh`, `/bin/bash -n act.sh`, and
+  `/bin/bash -n test.sh`; compile-check `reason.py` with Python 3.
 - Run the semantic test with `bash test.sh`.
 - Set `BASH_UNDER_TEST=/path/to/bash` to validate the append semantics against a
   particular Bash build.

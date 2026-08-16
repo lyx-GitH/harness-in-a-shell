@@ -7,6 +7,7 @@ TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/harness-in-a-shell.XXXXXX")"
 TMP_ROOT="$(cd "$TMP_ROOT" && pwd -P)"
 BASH_UNDER_TEST="${BASH_UNDER_TEST:-/bin/bash}"
 BASH_DIR="$(cd "$(dirname "$BASH_UNDER_TEST")" && pwd -P)"
+PYTHON_UNDER_TEST="${PYTHON_UNDER_TEST:-python3}"
 
 cleanup() {
     rm -rf "$TMP_ROOT"
@@ -349,4 +350,112 @@ final_staging_count="$(find "$FINISH_ROOT" -maxdepth 1 -name '.react.final.*' | 
 [[ "$final_staging_count" == 0 ]] ||
     fail "finish left $final_staging_count staging files after installation"
 
-printf 'ok: append execution, tool evolution, context editing, round lifecycle, and finish\n'
+"$BASH_UNDER_TEST" -n "$PROJECT_ROOT/act.sh"
+assert_structural_image "$PROJECT_ROOT/act.sh"
+"$PYTHON_UNDER_TEST" - "$PROJECT_ROOT/reason.py" <<'PYTHON_SYNTAX'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+compile(path.read_bytes(), str(path), "exec")
+PYTHON_SYNTAX
+
+REASON_STUB_ROOT="$TMP_ROOT/reason-stub"
+mkdir -p "$REASON_STUB_ROOT/openai"
+cat > "$REASON_STUB_ROOT/openai/__init__.py" <<'OPENAI_STUB'
+import json
+import os
+from pathlib import Path
+from types import SimpleNamespace
+
+
+class Responses:
+    def create(self, **request):
+        Path(os.environ["REASON_CAPTURE"]).write_text(
+            json.dumps(request),
+            encoding="utf-8",
+        )
+        return SimpleNamespace(output_text=': "reason.py SDK stub"')
+
+
+class OpenAI:
+    def __init__(self):
+        self.responses = Responses()
+OPENAI_STUB
+
+REASON_CAPTURE="$TMP_ROOT/reason-request.json"
+REASON_OUTPUT="$TMP_ROOT/reason-output.sh"
+PYTHONPATH="$REASON_STUB_ROOT" \
+REASON_CAPTURE="$REASON_CAPTURE" \
+    "$PYTHON_UNDER_TEST" "$PROJECT_ROOT/reason.py" "$PROJECT_ROOT/act.sh" \
+    > "$REASON_OUTPUT"
+
+[[ "$(cat "$REASON_OUTPUT")" == ': "reason.py SDK stub"' ]] ||
+    fail "reason.py did not emit the SDK response as shell source"
+"$PYTHON_UNDER_TEST" - "$REASON_CAPTURE" "$PROJECT_ROOT/act.sh" <<'REQUEST_ASSERTIONS'
+import json
+import sys
+from pathlib import Path
+
+request = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+source = Path(sys.argv[2]).read_text(encoding="utf-8")
+assert request["model"] == "gpt-5"
+assert request["input"] == source
+assert "You are an autonomous agent" in request["instructions"]
+assert 'ROOT="$(cd "$(dirname "$0")" && pwd -P)" || exit 1' in request["instructions"]
+assert "# <SYSTEM>" not in request["instructions"].splitlines()
+assert "# </SYSTEM>" not in request["instructions"].splitlines()
+REQUEST_ASSERTIONS
+
+ACT_ROOT="$TMP_ROOT/act-case"
+ACT_BIN="$ACT_ROOT/bin"
+mkdir -p "$ACT_BIN"
+cp "$PROJECT_ROOT/act.sh" "$PROJECT_ROOT/reason.py" "$ACT_ROOT/"
+cat > "$ACT_BIN/python3" <<'PYTHON_STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ "$#" == 2 && "$1" == */reason.py && "$2" == */act.sh ]]
+step=0
+if [[ -f "$ACT_STUB_STATE" ]]; then
+    read -r step < "$ACT_STUB_STATE"
+fi
+
+case "$step" in
+    0)
+        cat <<'FIRST_STEP'
+# ACT_STUB_STEP: 1
+act_tool() { printf '%s\n' "python split tool"; return 9; }
+observe act_tool
+reason
+FIRST_STEP
+        ;;
+    1)
+        cat <<'SECOND_STEP'
+# ACT_STUB_STEP: 2
+: "python split complete"
+SECOND_STEP
+        ;;
+    *)
+        exit 1
+        ;;
+esac
+
+printf '%s\n' "$((step + 1))" > "$ACT_STUB_STATE"
+PYTHON_STUB
+chmod +x "$ACT_BIN/python3"
+
+PATH="$ACT_BIN:$BASH_DIR:/usr/bin:/bin" \
+ACT_STUB_STATE="$ACT_ROOT/stub-state" \
+    "$BASH_UNDER_TEST" "$ACT_ROOT/act.sh" "exercise Python split" \
+    >> "$ACT_ROOT/act.sh"
+
+"$BASH_UNDER_TEST" -n "$ACT_ROOT/act.sh"
+assert_structural_image "$ACT_ROOT/act.sh"
+assert_count 1 '^# INPUT: exercise Python split$' "$ACT_ROOT/act.sh"
+assert_count 1 '^# ACT_STUB_STEP: 1$' "$ACT_ROOT/act.sh"
+assert_count 1 '^# ACT_STUB_STEP: 2$' "$ACT_ROOT/act.sh"
+assert_count 1 '^# OBS: python split tool$' "$ACT_ROOT/act.sh"
+assert_count 1 '^# EXIT: 9$' "$ACT_ROOT/act.sh"
+
+printf 'ok: Bash and Python reasoners, append execution, tool evolution, context editing, round lifecycle, and finish\n'

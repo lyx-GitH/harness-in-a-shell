@@ -11,6 +11,19 @@ bash ReAct.sh '<prompt>' >> ReAct.sh
 正在执行的脚本，同一个 Bash 进程继续向下读取并执行刚刚追加的源码。这里没有显式的
 `while` 循环。
 
+仓库也提供拆分后的 Python SDK 版本：
+
+```bash
+python3 -m pip install openai
+export OPENAI_API_KEY='...'
+bash act.sh '<prompt>' >> act.sh
+```
+
+`act.sh` 保留 append-only agent、函数工具、上下文编辑和 round 生命周期；
+`reason.py` 提取 SYSTEM、调用 Responses API，再打印下一段 Bash 源码。其中的
+`MODEL` 常量刻意作为 agent 可直接修改的普通源码：要演化模型或 API 调用时，直接修改
+这个 Python 工具，不需要再增加 shell 配置。
+
 这个仓库是一个建立在三个理念上的研究原型。
 
 ## 1. 脚本即上下文（Script as Context）
@@ -78,7 +91,7 @@ agent 判断，`finish` 只负责机械地完成 canonicalization。
 
 ## 运行
 
-依赖：
+完整单文件 `ReAct.sh` 版本的依赖：
 
 - Bash
 - `curl`
@@ -92,9 +105,16 @@ export OPENAI_API_KEY='...'
 bash ReAct.sh '找出并修复失败的测试。' >> ReAct.sh
 ```
 
-这条命令会刻意修改 `ReAct.sh`；第一次 context switch 后，canonical 路径还会暂时
-消失。这个原型假设同一目录中同时只有一个 active round。Git 是最简单的实验记录和
-复位点。
+拆分版本需要 Bash、Python 3、`openai` 包和 `OPENAI_API_KEY`。它的 canonical
+image 是 `act.sh`，并且 `reason.py` 必须放在同一目录：
+
+```bash
+bash act.sh '找出并修复失败的测试。' >> act.sh
+```
+
+两条命令都会刻意修改各自的 canonical shell image（`ReAct.sh` 或 `act.sh`）；第一次
+context switch 后，对应的 canonical 路径还会暂时消失。这个原型假设同一目录中同时
+只有一个 active round。Git 是最简单的实验记录和复位点。
 
 ## 无需 API key 的测试
 
@@ -102,9 +122,10 @@ bash ReAct.sh '找出并修复失败的测试。' >> ReAct.sh
 bash test.sh
 ```
 
-测试通过本地 `curl`/`jq` stub 验证：追加源码执行、函数演化与 shell 状态持续、重复
-修改上下文、第一次 switch 后的 de-canonicalization、跨 `exec` 的 PID 连续性，以及
-`finish` 自动安装 canonical `ReAct.sh`。测试覆盖 Bash 3.2 和 Bash 5.1。
+测试注入本地 `curl`、`jq`、Python 和 OpenAI SDK stub，绝不会调用真实 API。它会验证
+两种 reasoner、追加源码执行、函数演化与 shell 状态持续、重复修改上下文、第一次
+switch 后的 de-canonicalization、跨 `exec` 的 PID 连续性，以及 `finish` 自动安装
+canonical image。测试覆盖 Bash 3.2 和 Bash 5.1。
 
 ## 在可丢弃的 sandbox 中运行
 
