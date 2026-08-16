@@ -110,6 +110,24 @@
   For future research trials, use a trusted pre-finish/checkpoint snapshot if
   the exact action/request trajectory matters; the final worktree alone proves
   the canonical outcome but cannot reconstruct the discarded round.
+- The FINISH CONTRACT intentionally requires a terminal `edit_context` before
+  every `finish`: preserve all important cross-round information before the
+  first `# <TAPE>` boundary, and let only the clean replacement image call
+  `finish`.
+- The immediate identical tasklog repeat used all 64 requests, then correctly
+  called terminal `edit_context`, preserved a canonical-only bootstrap guard
+  above TAPE, and finished. Its task suite and the repository `test.sh` pass;
+  preserve it under
+  `experiments/2026-08-16-sol-xhigh-tasklog-finish-backup-contract-success-64/`.
+- The context-efficiency experiment recorded its exact prompt in
+  `experiments/2026-08-16-sol-xhigh-context-efficiency-16-reason-17-relay/README.md`, a
+  16-call agent-visible limit, and a 17-request trusted relay limit. Sol used 5
+  requests and durably added prompt deduplication, bounded call accounting,
+  `retape`, validated image switching, and guarded finalization. The candidate
+  passes `test.sh` and cuts the clean logical request payload by about 52%.
+  Selected images and the final canonical file were explicitly extracted as
+  read-only research data under that experiment's `extracted/` directory; the
+  candidate remains unadopted.
 - This host's legacy macOS 12.5.1 / Docker Desktop 4.9.1 stack is acceptable only
   for stub/verification convenience, not as the sole boundary for live arbitrary
   Bash. Use a no-sharing disposable UTM Linux VM now, or Docker Sandboxes clone

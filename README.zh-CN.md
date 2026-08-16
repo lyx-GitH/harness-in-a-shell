@@ -81,10 +81,11 @@ ReAct.sh（干净的 canonical；上一轮已经完成）
 之前它可以同时是 active 文件，但执行迁移后，它绝不会继续指向本轮过时的 active
 image。
 
-调用 `finish` 前，agent 必要时先用 `edit_context`，把值得长期保留的改进提升到第一个
-精确的 `# <TAPE>` 之前。`finish` 随后验证这个前缀，将其原子安装为 `ReAct.sh`，因此
-新 canonical image 不包含 tape 和 `finish` 调用，然后退出。哪些知识值得持久化仍由
-agent 判断，`finish` 只负责机械地完成 canonicalization。
+每次调用 `finish` 前，agent 都必须先用 `edit_context` 构建完整的 terminal image，并把
+所有需要跨 round 保留的重要信息放到第一个精确的 `# <TAPE>` 之前。只有这个替换后的
+image 才调用 `finish`；它会验证该前缀，将其原子安装为 `ReAct.sh`，然后退出。因此新的
+canonical image 不包含 tape 和 `finish` 调用。哪些知识值得持久化仍由 agent 判断，
+`finish` 只负责机械地完成 canonicalization。
 
 因此，第一个精确整行 `# <TAPE>` 是格式不变量。真正边界之前的可复用源码，不能再
 包含另一行完全相同的内容。
@@ -247,6 +248,8 @@ repository 以只读形式暴露给 VM。`--no-share-skills` 还会避免 sandbo
 | [Sol 仅含 ReAct 的轨迹](./experiments/2026-08-15-sol-xhigh-react-only-16-request-10k/) | 16 / 16 | 在 live tape 中改进了 observation framing、image validation、`edit_context`/`finish` 和 child Bash 启动；始终没有切换 context 或调用 `finish`。 | 出现了有价值的增量设计，但全部改动仍是可丢弃轨迹，没有成为持久源码。 |
 | [带 10k 输出上限的 tasklog 实验](./experiments/2026-08-15-sol-xhigh-tasklog-64-cap-10k-truncated/) | 2 / 64 | 第二个响应在测试 heredoc 内截断；Bash 把 EOF 当作终止符，container 在测试、文档和 `finish` 均未完成时仍以 0 退出；隔离检查还发现了 `list` bug。 | Responses 可能不完整时，进程成功和 `bash -n` 都不足以证明任务完成。 |
 | [采用模型默认输出上限的 tasklog finish 实验](./experiments/2026-08-16-sol-xhigh-tasklog-model-default-finish/) | 50 / 64 | 成功执行到 `finish`；active file 从 9,666 字节增长到观测到的 248,681 字节，随后 canonical `ReAct.sh` 与 seed 逐字节相同；全程没有 `edit_context`。 | 有力验证了长 round 执行和轨迹清理，但没有产生持久 harness 演化。 |
+| [tasklog terminal-backup 成功重跑](./experiments/2026-08-16-sol-xhigh-tasklog-finish-backup-contract-success-64/) | 64 / 64 | 执行 terminal `edit_context`，持久化了有用的 bootstrap 改进，干净地完成 `finish`，task 与 harness 测试均通过。 | 新的强制备份契约产生了持久且干净的发布结果。 |
+| [带 16-call prompt 的 context-efficiency 实验](./experiments/2026-08-16-sol-xhigh-context-efficiency-16-reason-17-relay/) | 5 / 17 | 持久化 prompt 去重、调用计数、`retape` 和受保护 finalization；clean request payload 约减少 52%。 | agent 在自身可见预算内完成了有意义的自我改进。 |
 
 主要结论：
 

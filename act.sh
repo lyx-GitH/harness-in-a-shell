@@ -168,24 +168,30 @@ edit_context() {
 
 # FINISH CONTRACT
 #
-# finish makes the current script's reusable prefix canonical. Before calling
-# it, use edit_context when necessary to place every durable improvement to
-# semantics, function-adjacent comments, tools, and reason before the first
-# exact # <TAPE> line. Everything after that boundary is disposable trajectory.
+# finish makes the current script's reusable prefix canonical. Never call it
+# from the accumulated, trajectory-bearing image. Before every finish, call
+# edit_context with a COMPLETE terminal replacement that preserves all
+# important information which must survive the round before the first exact
+# # <TAPE> line. This includes durable improvements to semantics,
+# function-adjacent comments, tools, and reason, plus any concise reusable
+# memory learned during the task. Everything left after that boundary is
+# disposable trajectory and will be lost.
 #
-# A typical terminal edit therefore ends like this:
+# The terminal transition therefore has this form:
 #
-#   ...clean reusable script...
+#   edit_context <<'FINAL_CONTEXT'
+#   ...complete clean script with important information preserved...
 #   # <TAPE>
 #   finish
+#   FINAL_CONTEXT
 #
-# Call finish directly with no arguments. It copies $SELF only through that
-# first boundary, stages the result beside $CANONICAL, verifies its Bash syntax,
-# makes it executable, atomically installs it as $ROOT/act.sh, clears any EXIT
-# trap, and exits. The finish call itself and all task-specific input,
-# observations, actions, and temporary memory after # <TAPE> are automatically
-# discarded. On failure, the existing canonical image remains installed and
-# finish returns nonzero.
+# Only the replacement image may call finish, directly and with no arguments.
+# finish copies $SELF only through that first boundary, stages the result beside
+# $CANONICAL, verifies its Bash syntax, makes it executable, atomically installs
+# it as $ROOT/act.sh, clears any EXIT trap, and exits. The finish call itself and
+# all task-specific input, observations, actions, and temporary memory after
+# # <TAPE> are automatically discarded. On failure, the existing canonical
+# image remains installed and finish returns nonzero.
 finish() {
     local __act_final
 

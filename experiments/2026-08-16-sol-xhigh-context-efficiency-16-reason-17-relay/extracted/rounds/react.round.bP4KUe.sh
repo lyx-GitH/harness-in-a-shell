@@ -265,3 +265,260 @@ fi
 reason
 
 # <TAPE>
+# INPUT: imporve this harness to improve context efficiency, at most 16 reason() call is permited due to budget constrain
+# Plan: identify context-cost hotspots, then install a compact harness preserving all contracts.
+inspect_harness() {
+    printf '%s\n' \
+        "bytes=$(wc -c < "$SELF")" \
+        "lines=$(wc -l < "$SELF")" \
+        "system_bytes=$(sed -n '/^# <SYSTEM>$/,/^# <\/SYSTEM>$/p' "$SELF" | wc -c)" \
+        "prefix_bytes=$(sed -n '1,/^# <TAPE>$/p' "$SELF" | wc -c)" \
+        "reason_calls=$(grep -Ec '^[[:space:]]*reason([[:space:]]|$)' "$SELF")"
+    command -v jq curl bash sed mktemp
+}
+observe inspect_harness
+reason
+# OBS: bytes=10681
+# OBS: lines=280
+# OBS: system_bytes=4930
+# OBS: prefix_bytes=10041
+# OBS: reason_calls=2
+# OBS: /usr/bin/jq
+# OBS: /usr/bin/curl
+# OBS: /usr/bin/bash
+# OBS: /usr/bin/sed
+# OBS: /usr/bin/mktemp
+# EXIT: 0
+export REACT_REASON_CALLS=2
+edit_context <<'NEW_CONTEXT'
+#!/usr/bin/env bash
+
+# <SYSTEM>
+# You are an autonomous Bash agent. This running script is your program,
+# durable toolset, state, execution history, and reasoning context.
+#
+# OUTPUT AND EXECUTION
+#
+# Output only valid Bash source, never Markdown fences. Persist prose only as
+# Bash comments. Your response is appended verbatim to $SELF; the same process
+# then executes it. Bash functions are tools, comments are state, and reason is
+# the continuation. Call reason only after all actions and observations for a
+# step. If you do not call it, the agent lifetime ends.
+#
+ROOT="$(cd "$(dirname "$0")" && pwd -P)" || exit 1
+SELF="$ROOT/$(basename "$0")"
+CANONICAL="$ROOT/ReAct.sh"
+
+# STRUCTURE AND STATE
+#
+# Exact operative lines "# <SYSTEM>", "# </SYSTEM>", and "# <TAPE>" are
+# immutable harness syntax. Every complete image must recreate them in their
+# structural roles. Treat other harness-parsed tags likewise.
+# "# INPUT:" is user input, "# OBS:" an observation, and "# EXIT:" its status.
+# The reusable image is before the first TAPE marker; later source is disposable
+# trajectory. Never rewrite, truncate, rename, or replace an active $SELF while
+# another reasoning step is possible. Appending through execution is safe.
+#
+# Run commands through observe when their output and status should enter the
+# context. Put pipelines, redirections, and compound syntax in a function and
+# observe that function.
+observe() {
+    local __file __status
+    __file="$(mktemp "${TMPDIR:-/tmp}/react-observe.XXXXXX")" || return
+    "$@" >"$__file" 2>&1
+    __status=$?
+    sed 's/^/# OBS: /' "$__file"
+    rm -f "$__file"
+    printf '# EXIT: %d\n' "$__status"
+}
+
+# CONTROL
+#
+# Each round permits at most 16 reason API attempts. The exported count survives
+# context-image execs and is reset only when a fresh canonical round starts.
+REACT_REASON_LIMIT=16
+: "${OPENAI_MODEL:=gpt-5.6-sol}"
+: "${OPENAI_RESPONSES_URL:=https://api.openai.com/v1/responses}"
+: "${OPENAI_UNIX_SOCKET:=}"
+
+if [[ "$SELF" == "$CANONICAL" ]]; then
+    REACT_REASON_CALLS=0
+elif [[ ! "${REACT_REASON_CALLS:-}" =~ ^[0-9]+$ ]]; then
+    REACT_REASON_CALLS=0
+fi
+export REACT_REASON_CALLS
+
+# FILE AS ROUND
+#
+# ReAct.sh is canonical only between rounds. The first image reached after
+# leaving it archives that round's old canonical path; later switches do
+# nothing. Only successful finalization installs the next ReAct.sh.
+if [[ "$SELF" != "$CANONICAL" && -e "$CANONICAL" ]]; then
+    __round="$(mktemp "$ROOT/.react.round.XXXXXX")" || exit 1
+    mv -f "$CANONICAL" "$__round" || exit 1
+    unset __round
+fi
+
+# CORE SEMANTICS
+#
+# Complete image + edit_context = structural context change.
+# Stable prefix + retape = efficient trajectory compression.
+# Clean terminal image + finish = durable round completion.
+# canonical ReAct.sh = completed round boundary.
+# Everything, including reasoning, lives in the shell image.
+# </SYSTEM>
+
+# CONTEXT TOOLS
+#
+# edit_context performs structural changes. Call it directly with a quoted
+# heredoc containing a COMPLETE replacement script. The replacement must
+# reconstruct the SYSTEM and marker structure, bindings, contracts, API
+# machinery, useful tools, current INPUT, and required memory. It receives a
+# fresh sibling path; exec preserves exported state but not ordinary functions
+# or variables. Syntax is checked before switching.
+edit_context() {
+    local __next
+    __next="$(mktemp "$ROOT/.react.image.XXXXXX")" || return
+    cat >"$__next" || { rm -f "$__next"; return 1; }
+    bash -n "$__next" || { rm -f "$__next"; return 1; }
+    exec bash "$__next" >>"$__next"
+}
+
+# retape is the efficient state-only compressor. It copies the reusable prefix
+# exactly and reads a replacement TAPE body from a quoted heredoc. That body
+# must preserve current INPUT and a concise sufficient summary, perform the
+# next action, and normally call reason. Use edit_context instead if the prefix
+# itself must change.
+retape() {
+    local __next
+    grep -q '^# <TAPE>$' "$SELF" || return
+    __next="$(mktemp "$ROOT/.react.image.XXXXXX")" || return
+    sed -n '1,/^# <TAPE>$/p' "$SELF" >"$__next" ||
+        { rm -f "$__next"; return 1; }
+    cat >>"$__next" || { rm -f "$__next"; return 1; }
+    bash -n "$__next" || { rm -f "$__next"; return 1; }
+    exec bash "$__next" >>"$__next"
+}
+
+# FINALIZATION
+#
+# finish may run only in a clean terminal replacement. It copies through the
+# first TAPE marker, validates and stages that reusable prefix, atomically
+# installs it as ReAct.sh, clears EXIT traps, and exits. On failure it leaves
+# any installed canonical image untouched.
+finish() {
+    local __final
+    grep -q '^# <TAPE>$' "$SELF" || return
+    __final="$(mktemp "$ROOT/.react.final.XXXXXX")" || return
+    sed -n '1,/^# <TAPE>$/p' "$SELF" >"$__final" ||
+        { rm -f "$__final"; return 1; }
+    bash -n "$__final" || { rm -f "$__final"; return 1; }
+    chmod +x "$__final" || { rm -f "$__final"; return 1; }
+    mv -f "$__final" "$CANONICAL" ||
+        { rm -f "$__final"; return 1; }
+    trap - EXIT
+    builtin exit 0
+}
+
+# finalize efficiently creates the required clean terminal replacement from
+# the current reusable prefix, then execs it. Structural improvements must
+# already be in that prefix. Call finalize directly and without arguments.
+finalize() {
+    local __next
+    grep -q '^# <TAPE>$' "$SELF" || return
+    __next="$(mktemp "$ROOT/.react.image.XXXXXX")" || return
+    sed -n '1,/^# <TAPE>$/p' "$SELF" >"$__next" ||
+        { rm -f "$__next"; return 1; }
+    printf '%s\n' 'finish' >>"$__next" ||
+        { rm -f "$__next"; return 1; }
+    bash -n "$__next" || { rm -f "$__next"; return 1; }
+    exec bash "$__next" >>"$__next"
+}
+
+# reason sends the SYSTEM block as API instructions and the entire current
+# image as input. It emits a valid comment recording each consumed attempt.
+# Relay-socket and HTTPS modes are supported. An exhausted budget never calls
+# the API.
+reason() {
+    local __system __used
+    local -a __curl
+
+    __used=${REACT_REASON_CALLS:-0}
+    if ((__used >= REACT_REASON_LIMIT)); then
+        printf '# OBS: reason budget exhausted at %d/%d\n' \
+            "$__used" "$REACT_REASON_LIMIT"
+        printf '# EXIT: 75\n'
+        return 75
+    fi
+    REACT_REASON_CALLS=$((__used + 1))
+    export REACT_REASON_CALLS
+    printf '# REASON-CALL: %d/%d\n' \
+        "$REACT_REASON_CALLS" "$REACT_REASON_LIMIT"
+
+    __system="$(
+        sed -n '/^# <SYSTEM>$/,/^# <\/SYSTEM>$/p' "$SELF" |
+            sed '1d;$d;s/^# //;s/^#$//'
+    )" || return
+
+    __curl=(-fsS -H "Content-Type: application/json" --data-binary @-)
+    if [[ -n "$OPENAI_UNIX_SOCKET" ]]; then
+        __curl+=(--unix-socket "$OPENAI_UNIX_SOCKET" --noproxy '*')
+    else
+        __curl+=(-H "Authorization: Bearer $OPENAI_API_KEY")
+    fi
+    __curl+=("$OPENAI_RESPONSES_URL")
+
+    (
+        set -o pipefail
+        jq -n \
+            --arg model "$OPENAI_MODEL" \
+            --arg instructions "$__system" \
+            --rawfile input "$SELF" \
+            '{model:$model, instructions:$instructions, input:$input}' |
+        curl "${__curl[@]}" |
+        jq -er '
+            [.output[]? |
+             select(.type=="message") |
+             .content[]? |
+             select(.type=="output_text") |
+             .text] as $t |
+            if ($t|length)==0
+            then error("response contained no output_text")
+            else $t|join("\n")
+            end
+        '
+    )
+}
+
+if (($#)); then
+    printf '%s\n' "$@" | sed 's/^/# INPUT: /'
+fi
+
+reason
+
+# <TAPE>
+# INPUT: imporve this harness to improve context efficiency, at most 16 reason() call is permited due to budget constrain
+# STATE: Installed a compact candidate harness. It adds a hard 16-attempt
+# round budget preserved across image execs, syntax-checking context switches,
+# retape for cheap trajectory compression, and finalize for cheap clean
+# terminal replacement. Validate the active candidate, then finalize it.
+harness_selftest() {
+    local marker
+    bash -n "$SELF" || return
+    for marker in '<SYSTEM>' '</SYSTEM>' '<TAPE>'; do
+        [[ $(grep -Fxc "# $marker" "$SELF") -eq 1 ]] || return 1
+    done
+    declare -F observe edit_context retape finish finalize reason
+    printf 'bytes=%s\n' "$(wc -c <"$SELF")"
+    printf 'lines=%s\n' "$(wc -l <"$SELF")"
+    printf 'system_bytes=%s\n' \
+        "$(sed -n '/^# <SYSTEM>$/,/^# <\/SYSTEM>$/p' "$SELF" | wc -c)"
+    printf 'prefix_bytes=%s\n' \
+        "$(sed -n '1,/^# <TAPE>$/p' "$SELF" | wc -c)"
+    printf 'reason_calls_before_next=%s limit=%s\n' \
+        "$REACT_REASON_CALLS" "$REACT_REASON_LIMIT"
+    printf 'canonical_present=%s\n' "$([[ -e "$CANONICAL" ]] && echo yes || echo no)"
+}
+observe harness_selftest
+reason
+NEW_CONTEXT

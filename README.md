@@ -89,12 +89,13 @@ as the next round's entry. It may be the active file before the first switch,
 but it never remains as a stale active image after execution has migrated
 elsewhere.
 
-Before calling `finish`, the agent uses `edit_context` when necessary to promote
-reusable improvements above the first exact `# <TAPE>` boundary. `finish` then
-validates that prefix, atomically installs it as `ReAct.sh`, and exits. The new
-canonical image therefore omits the tape and the `finish` call. `finish` does not
-decide what knowledge is durable; that semantic edit remains the agent's
-responsibility.
+Before every call to `finish`, the agent must use `edit_context` to build a
+complete terminal image and preserve all important information that must survive
+the round above the first exact `# <TAPE>` boundary. Only that replacement image
+calls `finish`, which validates the prefix, atomically installs it as `ReAct.sh`,
+and exits. The new canonical image therefore omits the tape and the `finish`
+call. `finish` does not decide what knowledge is durable; that semantic edit
+remains the agent's responsibility.
 
 The first exact line `# <TAPE>` is therefore a format invariant. Reusable source
 before the real boundary must not contain another identical whole line.
@@ -272,6 +273,8 @@ none of the experimental harness variants below was adopted.
 | [Sol ReAct-only trace](./experiments/2026-08-15-sol-xhigh-react-only-16-request-10k/) | 16 / 16 | Improved observation framing, image validation, `edit_context`/`finish`, and child-Bash startup in the live tape. It never switched context or called `finish`. | Useful incremental design work occurred, but every change remained disposable trajectory rather than durable source. |
 | [Tasklog trial with 10k output cap](./experiments/2026-08-15-sol-xhigh-tasklog-64-cap-10k-truncated/) | 2 / 64 | The second response ended inside a test heredoc. Bash accepted EOF as the terminator and the container exited 0 without completing tests, docs, or `finish`; an isolated check also found a `list` bug. | Process success and `bash -n` are insufficient evidence when a Responses result may be incomplete. |
 | [Tasklog finish trial with model-default output limit](./experiments/2026-08-16-sol-xhigh-tasklog-model-default-finish/) | 50 / 64 | Completed through `finish`. The active file grew from 9,666 to an observed 248,681 bytes, then canonical `ReAct.sh` became byte-identical to the seed; no `edit_context` occurred. | Strong evidence for long-round execution and trajectory cleanup, but no durable harness evolution. |
+| [Tasklog terminal-backup successful repeat](./experiments/2026-08-16-sol-xhigh-tasklog-finish-backup-contract-success-64/) | 64 / 64 | Called terminal `edit_context`, preserved a useful bootstrap improvement, finished cleanly, and passed both task and harness suites. | Positive evidence that the mandatory backup contract produces durable, clean publication. |
+| [Context-efficiency run with 16-call prompt](./experiments/2026-08-16-sol-xhigh-context-efficiency-16-reason-17-relay/) | 5 / 17 | Persisted a candidate with prompt deduplication, bounded call accounting, `retape`, and guarded finalization; clean request payload fell about 52%. | A meaningful self-improvement completed well within the agent-visible budget. |
 
 The main conclusions are:
 

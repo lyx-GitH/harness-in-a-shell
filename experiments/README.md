@@ -74,3 +74,31 @@ agent never used `edit_context`, and no temporary tool or harness change
 survived the TAPE boundary. The full final worktree is retained as a
 quarantined binary artifact; because `finish` discards the tape, the exact live
 trajectory is not recoverable from the final archive.
+
+## Complete E2E contract trajectories
+
+The two 2026-08-16 datasets below retain only relevant shell images and README
+analysis in Git. Raw container archives and runner metadata remain local.
+
+| Dimension | Tasklog terminal backup | Context efficiency |
+| --- | --- | --- |
+| Dataset | `2026-08-16-sol-xhigh-tasklog-finish-backup-contract-success-64/` | `2026-08-16-sol-xhigh-context-efficiency-16-reason-17-relay/` |
+| Workload | Build and fully test an event-sourced task tracker | Improve harness context efficiency under an agent-visible 16-call budget |
+| Relay requests | 64 / 64 | 5 / 17 |
+| Context behavior | One 286,195-byte append-only round; no mid-task compression | Early structural switch, failed self-test, diagnosis, corrected switch, clean finalization |
+| Terminal behavior | Mandatory terminal `edit_context`, then direct `finish` | `finalize` creates a clean terminal image, then direct `finish` |
+| Durable improvement | Canonical-only bootstrap prevents replacement images from wasting a `reason` call | Prompt deduplication, bounded call accounting, `retape`, validation, and guarded finalization |
+| Verification | Task suite and repository `test.sh` pass | Repository `test.sh` passes; measured clean payload is about 52% smaller |
+
+Together they exercise the full contract in complementary ways. The tasklog
+trajectory proves that a large real workload can preserve task outputs, promote
+one selected runtime improvement, discard its tape, and atomically publish a
+clean next-round image. Its behavior is correct but inefficient: it consumes
+the entire request budget and accumulates repeated terminal candidates through
+non-tail reasoning calls.
+
+The context-efficiency trajectory is the stronger self-management result. It
+switches context early, treats a failed self-test as actionable evidence,
+repairs the candidate, measures its savings, and finishes after five requests.
+Its refactor is much broader and therefore carries more adoption risk, but it
+directly addresses the inefficiency exposed by the tasklog run.

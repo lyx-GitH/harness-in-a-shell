@@ -64,7 +64,7 @@ observe() {
     local __react_observe_output __react_observe_status
 
     __react_observe_output="$(mktemp "${TMPDIR:-/tmp}/react-observe.XXXXXX")" || return
-    "$@" > "$__react_observe_output" 2>&1
+    "$@" >"$__react_observe_output" 2>&1
     __react_observe_status=$?
     sed 's/^/# OBS: /' "$__react_observe_output"
     rm -f "$__react_observe_output"
@@ -164,8 +164,8 @@ edit_context() {
     local __react_next
 
     __react_next="$(mktemp "$ROOT/.react.image.XXXXXX")" || return
-    cat > "$__react_next" || return
-    exec bash "$__react_next" >> "$__react_next"
+    cat >"$__react_next" || return
+    exec bash "$__react_next" >>"$__react_next"
 }
 
 # FINISH CONTRACT
@@ -199,7 +199,7 @@ finish() {
 
     grep -q '^# <TAPE>$' "$SELF" || return
     __react_final="$(mktemp "$ROOT/.react.final.XXXXXX")" || return
-    sed -n '1,/^# <TAPE>$/p' "$SELF" > "$__react_final" || return
+    sed -n '1,/^# <TAPE>$/p' "$SELF" >"$__react_final" || return
     bash -n "$__react_final" || return
     chmod +x "$__react_final" || return
     mv -f "$__react_final" "$CANONICAL" || return
@@ -258,10 +258,14 @@ reason() {
     )
 }
 
-if (($#)); then
-    printf '%s\n' "$1" | sed 's/^/# INPUT: /'
+# Canonical execution starts a fresh round. Replacement images explicitly
+# resume or finish after their tape boundary and do not invoke reason here.
+if [[ "$SELF" == "$CANONICAL" ]]; then
+    if (($#)); then
+        printf '%s\n' "$1" | sed 's/^/# INPUT: /'
+    fi
+    reason
 fi
 
-reason
-
 # <TAPE>
+finish
